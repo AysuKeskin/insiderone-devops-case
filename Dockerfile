@@ -3,7 +3,7 @@
 # Base images pinned by digest for reproducible builds. Bump intentionally
 # (e.g. for CVE patches) — never silently. To refresh:
 #   docker pull <tag> && docker inspect --format='{{index .RepoDigests 0}}' <tag>
-FROM golang:1.22-alpine@sha256:1699c10032ca2582ec89a24a1312d986a3f094aed3d5c1147b19880afe40e052 AS build
+FROM golang:1.25-alpine@sha256:8d22e29d960bc50cd025d93d5b7c7d220b1ee9aa7a239b3c8f55a57e987e8d45 AS build
 WORKDIR /src
 
 COPY go.mod go.sum ./
