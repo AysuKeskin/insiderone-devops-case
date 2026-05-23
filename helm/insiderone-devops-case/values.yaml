@@ -3,6 +3,16 @@
 
 replicaCount: 1
 
+# Rollout strategy: explicit zero-downtime, safe in small clusters.
+# maxUnavailable=0 means we never drop below desired capacity during a rollout.
+# maxSurge=1 caps the extra pod count during rollout to 1, so rollouts are
+# resource-predictable even if HPA scales us up to maxReplicas.
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0
+
 image:
   repository: ghcr.io/aysukeskin/insiderone-devops-case
   pullPolicy: IfNotPresent
