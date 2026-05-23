@@ -32,11 +32,11 @@ COPY --from=build /out/server /server
 USER nonroot:nonroot
 EXPOSE 8080
 
-
-
 # OCI labels for GHCR linkage and supply-chain provenance.
 LABEL org.opencontainers.image.source="https://github.com/AysuKeskin/insiderone-devops-case" \
       org.opencontainers.image.description="Tiny Go HTTP service for Insider One DevOps case study" \
       org.opencontainers.image.licenses="MIT"
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 CMD ["/server", "healthcheck"]
 
 ENTRYPOINT ["/server"]

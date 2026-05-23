@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -29,10 +30,16 @@ const (
 	// in-flight requests to finish, short enough that Kubernetes won't
 	// SIGKILL us first (default terminationGracePeriodSeconds is 30).
 	shutdownTimeout = 15 * time.Second
+
+	healthcheckTimeout = 2 * time.Second
 )
 
 func main() {
-	logger := newLogger()
+	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
+		os.Exit(runHealthcheck(healthcheckEndpoint()))
+	}
+
+	logger := newLogger(os.Stdout)
 	slog.SetDefault(logger)
 
 	addr := ":" + getenv("PORT", "8080")
@@ -86,10 +93,44 @@ func main() {
 	logger.Info("server stopped")
 }
 
-func newLogger() *slog.Logger {
+func newLogger(out io.Writer) *slog.Logger {
 	var level slog.Level
 	_ = level.UnmarshalText([]byte(strings.ToUpper(getenv("LOG_LEVEL", "INFO"))))
-	return slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
+	return slog.New(slog.NewJSONHandler(out, &slog.HandlerOptions{
+		Level: level,
+		ReplaceAttr: func(groups []string, attr slog.Attr) slog.Attr {
+			if len(groups) == 0 && attr.Key == slog.TimeKey {
+				attr.Key = "timestamp"
+			}
+			return attr
+		},
+	}))
+}
+
+func healthcheckEndpoint() string {
+	return "http://127.0.0.1:" + getenv("PORT", "8080") + "/healthz"
+}
+
+func runHealthcheck(endpoint string) int {
+	ctx, cancel := context.WithTimeout(context.Background(), healthcheckTimeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return 1
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return 1
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		return 1
+	}
+	return 0
 }
 
 func getenv(key, fallback string) string {

@@ -24,6 +24,5 @@ services:
     security_opt:
       - no-new-privileges:true
     restart: unless-stopped
-    # No healthcheck: distroless has no shell/wget/curl. K8s probes
-    # in the Helm chart cover this for the real deployment. For local
-    # dev, hit /healthz from the host.
+    # Dockerfile healthcheck uses `/server healthcheck`, so distroless
+    # does not need shell/wget/curl inside the runtime image.

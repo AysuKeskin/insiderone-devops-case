@@ -29,11 +29,11 @@ curl localhost:8080/ping        # → pong
 | Target | What it does | Needs |
 |---|---|---|
 | `make help` | list targets | — |
-| `make run` | run server with `go run` | Go 1.22+ |
-| `make build` | build local binary into `bin/server` | Go 1.22+ |
-| `make test` | unit tests with race detector + coverage | Go 1.22+ |
-| `make docker-test` | run tests inside a `golang:1.22` container | Docker only |
-| `make lint` | `go vet ./...` | Go 1.22+ |
+| `make run` | run server with `go run` | Go 1.25+ |
+| `make build` | build local binary into `bin/server` | Go 1.25+ |
+| `make test` | unit tests with race detector + coverage | Go 1.25+ |
+| `make docker-test` | run tests inside a `golang:1.25` container | Docker only |
+| `make lint` | `go vet ./...` | Go 1.25+ |
 | `make docker-build` | multi-stage build, tags image with git SHA + `latest` | Docker |
 | `make docker-run` | run container on `:8080`, read-only, all caps dropped | Docker |
 | `make compose-up` | `docker compose up --build` (local dev) | Docker |
@@ -56,6 +56,7 @@ See `.env.example`. In production (Kubernetes), config comes from the ConfigMap 
 ## Production-aware extras
 
 - **Multi-stage Dockerfile** → distroless `static-debian12:nonroot` base pinned by digest, non-root uid `65532`, ~7 MB image.
+- **Docker `HEALTHCHECK`** → uses `/server healthcheck`, so the distroless runtime image does not need curl, wget, or a shell.
 - **OCI image labels** (`org.opencontainers.image.source` etc.) so GHCR links the image back to the repo.
 - **`/healthz` vs `/readyz`** wired to liveness vs readiness probes separately.
 - **Request-ID middleware** generates `X-Request-ID` per request and emits it on every log line.
@@ -73,4 +74,3 @@ helm/              (Day 2) Helm chart with dev/prod values
 infra/terraform/   (Day 3) EC2, EIP, SG, IAM OIDC role
 .github/workflows/ (Day 3) CI + deploy
 ```
-
