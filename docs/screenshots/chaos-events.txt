@@ -1,0 +1,10 @@
+55s         Normal   Scheduled   pod/insiderone-devops-case-f5cfd84d6-j6fwm    Successfully assigned default/insiderone-devops-case-f5cfd84d6-j6fwm to minikube
+55s         Normal   Pulled      pod/insiderone-devops-case-f5cfd84d6-j6fwm    Container image "ghcr.io/aysukeskin/insiderone-devops-case:latest" already present on machine and can be accessed by the pod
+55s         Normal   Created     pod/insiderone-devops-case-f5cfd84d6-j6fwm    Container created
+55s         Normal   Started     pod/insiderone-devops-case-f5cfd84d6-j6fwm    Container started
+25s         Normal   Killing     pod/insiderone-devops-case-f5cfd84d6-j6fwm    Stopping container app
+11s         Normal   Killing     pod/insiderone-devops-case-f5cfd84d6-57p2d    Stopping container app
+11s         Normal   Started     pod/insiderone-devops-case-f5cfd84d6-wftfs    Container started
+11s         Normal   Created     pod/insiderone-devops-case-f5cfd84d6-wftfs    Container created
+11s         Normal   Pulled      pod/insiderone-devops-case-f5cfd84d6-wftfs    Container image "ghcr.io/aysukeskin/insiderone-devops-case:latest" already present on machine and can be accessed by the pod
+11s         Normal   Scheduled   pod/insiderone-devops-case-f5cfd84d6-wftfs    Successfully assigned default/insiderone-devops-case-f5cfd84d6-wftfs to minikube
