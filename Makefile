@@ -1,5 +1,5 @@
 APP        := insiderone-devops-case
-GH_OWNER   ?= AysuKeskin
+GH_OWNER   ?= aysukeskin
 IMAGE      := ghcr.io/$(GH_OWNER)/$(APP)
 VERSION    := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 COMMIT     := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
@@ -18,7 +18,7 @@ test: ## run unit tests (needs Go locally)
 	go test ./... -race -cover
 
 docker-test: ## run unit tests inside a golang container (no local Go needed)
-	docker run --rm -v "$(CURDIR)":/src -w /src golang:1.22 go test ./... -race -cover
+	docker run --rm -v "$(CURDIR)":/src -w /src golang:1.25 go test ./... -race -cover
 
 lint: ## run go vet
 	go vet ./...
