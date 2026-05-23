@@ -1,0 +1,78 @@
+# Default values — both environments inherit from this; values-dev.yaml and
+# values-prod.yaml override only what differs.
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/aysukeskin/insiderone-devops-case
+  pullPolicy: IfNotPresent
+  # tag defaults to Chart.appVersion; CI overrides via --set image.tag=$SHA
+  tag: ""
+
+imagePullSecrets: []
+
+service:
+  type: ClusterIP
+  port: 80          # external service port
+  targetPort: 8080  # container port
+
+ingress:
+  enabled: true
+  className: nginx
+  host: tiny.local
+
+# App config injected via ConfigMap (non-secret env vars only).
+config:
+  PORT: "8080"
+  LOG_LEVEL: "info"
+
+# Secret object is part of the chart contract, but real values are supplied
+# at deploy time via --set, CI secrets, or an external secret manager.
+secret:
+  enabled: true
+  stringData: {}
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi
+
+# Liveness/readiness/startup probes hit dedicated endpoints; never share.
+probes:
+  liveness:
+    path: /healthz
+    initialDelaySeconds: 5
+    periodSeconds: 10
+  readiness:
+    path: /readyz
+    initialDelaySeconds: 2
+    periodSeconds: 5
+  startup:
+    path: /healthz
+    periodSeconds: 1
+    failureThreshold: 30
+
+# CPU-based autoscaling (case Day 2 bonus).
+hpa:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+
+# Pod-level security context: non-root, no privilege escalation, read-only FS.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
