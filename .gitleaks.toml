@@ -13,7 +13,9 @@ paths = [
   '''(^|/)docs/evidence/.*''',
   '''(^|/)go\.sum$''',
 ]
-# Allow the obviously-fake placeholders used in .env.example and docs.
+# Allow only the obvious placeholder *values* used in .env.example and docs.
+# Anchored so a real secret containing "example" inside its value is NOT
+# whitelisted.
 regexes = [
-  '''(?i)example|placeholder|dummy|changeme|xxxxxxxx''',
+  '''(?i)^(example|placeholder|dummy|changeme|x{8,})$''',
 ]
