@@ -1,0 +1,26 @@
+# prod overrides — 3 base replicas, autoscale up to 10, tighter limits,
+# info-level logs, prod hostname.
+replicaCount: 3
+
+config:
+  PORT: "8080"
+  LOG_LEVEL: "info"
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+ingress:
+  enabled: true
+  className: nginx
+  host: tiny.example.com
+
+hpa:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70

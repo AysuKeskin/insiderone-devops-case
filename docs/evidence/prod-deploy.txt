@@ -1,0 +1,7 @@
+NAME                                         READY   STATUS    RESTARTS   AGE
+pod/insiderone-devops-case-f5cfd84d6-57p2d   1/1     Running   0          51s
+pod/insiderone-devops-case-f5cfd84d6-dvmgb   1/1     Running   0          66s
+pod/insiderone-devops-case-f5cfd84d6-fx2jg   1/1     Running   0          51s
+
+NAME                                                         REFERENCE                           TARGETS              MINPODS   MAXPODS   REPLICAS   AGE
+horizontalpodautoscaler.autoscaling/insiderone-devops-case   Deployment/insiderone-devops-case   cpu: <unknown>/70%   3         10        3          66s

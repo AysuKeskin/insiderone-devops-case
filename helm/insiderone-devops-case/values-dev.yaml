@@ -1,0 +1,14 @@
+# dev overrides — single replica, verbose logs, no autoscaling.
+replicaCount: 1
+
+config:
+  PORT: "8080"
+  LOG_LEVEL: "debug"
+
+ingress:
+  enabled: true
+  className: nginx
+  host: tiny.dev.local
+
+hpa:
+  enabled: false
