@@ -1,0 +1,19 @@
+# gitleaks config — inherits default ruleset and only narrows it where needed.
+# We do not store any real credentials in this repo; AWS access is via
+# GitHub OIDC and Helm secrets are injected at deploy time.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Globally trusted paths and known-safe placeholders"
+paths = [
+  '''\.gitleaks\.toml$''',
+  '''(^|/)\.env\.example$''',
+  '''(^|/)docs/evidence/.*''',
+  '''(^|/)go\.sum$''',
+]
+# Allow the obviously-fake placeholders used in .env.example and docs.
+regexes = [
+  '''(?i)example|placeholder|dummy|changeme|xxxxxxxx''',
+]
