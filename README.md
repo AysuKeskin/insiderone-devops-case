@@ -91,7 +91,7 @@ Deployments use an explicit `RollingUpdate` with `maxSurge: 1, maxUnavailable: 0
 
 ### Rollout & rollback exercise
 
-The `/version` endpoint makes rollouts observable end-to-end. With `helm upgrade --set image.tag=<new>` the response flips to the new tag; `helm rollback` immediately flips it back. Evidence captured to `docs/screenshots/version-before-bump.txt`, `version-after-bump.txt`, `version-after-rollback.txt`, plus `helm-history-final.txt` showing the full revision chain (install → upgrade → upgrade → upgrade → rollback → upgrade → rollback).
+The `/version` endpoint makes rollouts observable end-to-end. With `helm upgrade --set image.tag=<new>` the response flips to the new tag; `helm rollback` immediately flips it back. Evidence captured to `docs/evidence/version-before-bump.txt`, `version-after-bump.txt`, `version-after-rollback.txt`, plus `helm-history-final.txt` showing the full revision chain (install → upgrade → upgrade → upgrade → rollback → upgrade → rollback).
 
 ## Chaos test
 
@@ -101,7 +101,7 @@ Killed one pod from a 3-replica deployment to observe Kubernetes self-healing:
 kubectl delete pod <one-of-three-pods>
 ```
 
-A replacement pod was scheduled within ~2 seconds and reached `Ready` shortly after. Replica count stayed at 3 throughout because HPA's `minReplicas: 3` floor enforces it independent of CPU metrics. What I learned: the Deployment controller doesn't wait for the dead pod to be `Terminated` before creating the replacement — it reacts to the desired-vs-actual delta immediately, so a graceful shutdown drain and a new pod's startup overlap cleanly. Evidence in `docs/screenshots/chaos-*.txt`.
+A replacement pod was scheduled within ~2 seconds and reached `Ready` shortly after. Replica count stayed at 3 throughout because HPA's `minReplicas: 3` floor enforces it independent of CPU metrics. What I learned: the Deployment controller doesn't wait for the dead pod to be `Terminated` before creating the replacement — it reacts to the desired-vs-actual delta immediately, so a graceful shutdown drain and a new pod's startup overlap cleanly. Evidence in `docs/evidence/chaos-*.txt`.
 
 ## Production-aware extras
 
@@ -123,7 +123,7 @@ internal/version/  ldflags-populated build info
 helm/insiderone-devops-case/
                    Helm chart: Deployment, Service, Ingress, ConfigMap,
                    Secret, HPA, values-dev.yaml, values-prod.yaml
-docs/screenshots/  evidence: helm history, rollout, rollback, chaos outputs
+docs/evidence/     command output evidence: helm history, rollout, rollback, chaos
 infra/terraform/   (Day 3) EC2, EIP, SG, IAM OIDC role
 .github/workflows/ (Day 3) CI + deploy
 ```
