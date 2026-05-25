@@ -15,7 +15,10 @@ role and trigger a shell command on the instance using only short-lived
 credentials; the security group can also close port 22 entirely, shrinking
 the public attack surface. Tradeoff: Send-Command is asynchronous and harder
 to stream output from than `ssh -t`, so the workflow polls
-`ssm:GetCommandInvocation` until the command resolves.
+`ssm:GetCommandInvocation` until the command resolves. One operational
+consequence: SSM runs commands as root, but the cluster is owned by
+`ec2-user` (kubeconfig and docker group), so the deploy command must wrap
+itself in `runuser -l ec2-user -c '...'` to reach minikube.
 
 ## ADR 007 - Helm Upgrade from CI instead of GitOps
 
