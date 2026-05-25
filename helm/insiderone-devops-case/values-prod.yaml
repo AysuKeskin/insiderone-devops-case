@@ -17,7 +17,9 @@ resources:
 ingress:
   enabled: true
   className: nginx
-  host: tiny.example.com
+  # Empty host = catch-all rule, so the app answers on the raw EC2 Elastic IP
+  # (no DNS name in this demo). Set a real hostname here once a domain is wired.
+  host: ""
 
 hpa:
   enabled: true
