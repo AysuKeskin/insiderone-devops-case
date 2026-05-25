@@ -14,7 +14,7 @@ KUBECTL_VERSION="v1.31.0"
 
 # --- packages ----------------------------------------------------------------
 dnf update -y
-dnf install -y docker git conntrack-tools iptables-services tar
+dnf install -y docker git conntrack-tools iptables-services socat tar
 
 systemctl enable --now docker
 usermod -aG docker ec2-user
@@ -78,42 +78,33 @@ systemctl enable --now minikube.service
 sudo -u ec2-user -H /usr/local/bin/minikube addons enable ingress
 sudo -u ec2-user -H /usr/local/bin/minikube addons enable metrics-server
 
-# --- forward host 80/443 to the minikube ingress ----------------------------
-# The minikube docker-driver IP can change across restarts, so the unit
-# re-derives it at start time and flushes any stale DNAT rules first.
-cat > /usr/local/sbin/minikube-ingress-forward.sh <<'EOF'
+# --- expose host port 80 through the minikube ingress ------------------------
+# A small TCP proxy is simpler and less fragile than DNAT/FORWARD rules on an
+# EC2 host running Docker-managed bridge networks.
+cat > /usr/local/sbin/minikube-http-forward.sh <<'EOF'
 #!/bin/bash
 set -euo pipefail
 MINIKUBE_IP="$(runuser -l ec2-user -c 'minikube ip')"
-sysctl -w net.ipv4.ip_forward=1
-# Reset our chain entries first so reboots/restarts don't stack duplicates.
-# Process substitution keeps grep's "no match" (exit 1 on first boot) from
-# tripping pipefail and killing the script before any rule is added.
-while read -r rule; do
-  [ -n "$rule" ] && iptables -t nat $rule || true
-done < <(iptables -t nat -S PREROUTING | grep -E -- '--dport (80|443)' | sed 's/^-A/-D/' || true)
-iptables -t nat -A PREROUTING -p tcp --dport 80  -j DNAT --to-destination "$MINIKUBE_IP:80"
-iptables -t nat -A PREROUTING -p tcp --dport 443 -j DNAT --to-destination "$MINIKUBE_IP:443"
-iptables -t nat -C POSTROUTING -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -j MASQUERADE
+exec /usr/bin/socat TCP-LISTEN:80,fork,reuseaddr TCP:"$MINIKUBE_IP":80
 EOF
-chmod +x /usr/local/sbin/minikube-ingress-forward.sh
+chmod +x /usr/local/sbin/minikube-http-forward.sh
 
-cat > /etc/systemd/system/minikube-ingress-forward.service <<'EOF'
+cat > /etc/systemd/system/minikube-http-forward.service <<'EOF'
 [Unit]
-Description=Forward host 80/443 to minikube ingress
+Description=Proxy host port 80 to minikube ingress
 After=minikube.service
 Requires=minikube.service
 
 [Service]
-Type=oneshot
-RemainAfterExit=yes
-ExecStart=/usr/local/sbin/minikube-ingress-forward.sh
+Restart=always
+RestartSec=3
+ExecStart=/usr/local/sbin/minikube-http-forward.sh
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
-systemctl enable --now minikube-ingress-forward.service
+systemctl enable --now minikube-http-forward.service
 
 echo "bootstrap complete: $(date -u +%Y-%m-%dT%H:%M:%SZ)" > /var/log/bootstrap-done

@@ -51,7 +51,7 @@ kubectl get hpa,ingress,svc
 
 | Symptom | Likely cause | Action |
 |---|---|---|
-| `/ping` times out, pods Running | host→minikube forward stale after reboot | `sudo systemctl restart minikube-ingress-forward` |
+| `/ping` times out, pods Running | host-to-minikube HTTP proxy stale after reboot | `sudo systemctl restart minikube-http-forward` |
 | Cluster gone after reboot | minikube didn't restart | `sudo systemctl status minikube`; `sudo systemctl restart minikube` |
 | Deploy job: `not authorized to perform sts:AssumeRoleWithWebIdentity` | OIDC `sub` / owner-casing mismatch | confirm `AWS_ROLE_ARN` secret + trust policy repo path casing |
 | Deploy job: SSM `Failed` | helm/kubectl ran as root, not ec2-user | command must use `runuser -l ec2-user` (see ADR 006) |
