@@ -45,7 +45,7 @@ resource "aws_iam_instance_profile" "ec2_ssm" {
 # --- security group: only 80/443 in, all out, NO SSH ------------------------
 resource "aws_security_group" "ec2" {
   name        = "${var.github_repo}-ec2"
-  description = "Inbound HTTP/HTTPS for the demo app. No SSH — access is via SSM Session Manager."
+  description = "Inbound HTTP/HTTPS for the demo app. No SSH - access is via SSM Session Manager."
 
   ingress {
     description = "HTTP from anywhere"
@@ -74,9 +74,9 @@ resource "aws_security_group" "ec2" {
 
 # --- EC2 instance -----------------------------------------------------------
 resource "aws_instance" "app" {
-  ami                  = data.aws_ami.al2023.id
-  instance_type        = var.instance_type
-  iam_instance_profile = aws_iam_instance_profile.ec2_ssm.name
+  ami                    = data.aws_ami.al2023.id
+  instance_type          = var.instance_type
+  iam_instance_profile   = aws_iam_instance_profile.ec2_ssm.name
   vpc_security_group_ids = [aws_security_group.ec2.id]
 
   metadata_options {
