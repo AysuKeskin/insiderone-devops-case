@@ -82,7 +82,7 @@ jobs:
 
           PARAMS=$(jq -n --arg tag "$TAG" '{
             commands: [
-              "runuser -l ec2-user -c \"cd /opt/app && git pull --ff-only && helm upgrade --install insiderone-devops-case ./helm/insiderone-devops-case -f helm/insiderone-devops-case/values-prod.yaml --set-string image.tag=\($tag) --wait --atomic --timeout 8m && kubectl rollout status deployment/insiderone-devops-case --timeout=8m\""
+              "runuser -l ec2-user -c \"set -euo pipefail; IMAGE=ghcr.io/aysukeskin/insiderone-devops-case:\($tag); cd /opt/app && git pull --ff-only; for attempt in 1 2 3 4 5; do docker pull \\$IMAGE && break; sleep 20; done; minikube image load \\$IMAGE; helm upgrade --install insiderone-devops-case ./helm/insiderone-devops-case -f helm/insiderone-devops-case/values-prod.yaml --set-string image.tag=\($tag) --wait --atomic --timeout 8m && kubectl rollout status deployment/insiderone-devops-case --timeout=8m\""
             ]
           }')
 
