@@ -213,6 +213,8 @@ jobs:
       id-token: write   # assume the AWS deploy role via OIDC
       contents: read
     steps:
+      - uses: actions/checkout@v4   # needed so the local ./.github/actions/ssm-deploy is on disk
+
       - name: resolve and validate image tag
         id: tag
         env:
