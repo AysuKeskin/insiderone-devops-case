@@ -23,12 +23,12 @@ container, deploys to minikube on EC2 through CI/CD, and exposes a public URL.
   rollouts; separate liveness/readiness/startup probes; restricted pod and
   container `securityContext`. Ingress supports a hostless catch-all rule for
   raw-IP access on EC2.
-- **CI** (`.github/workflows/ci.yml`): lint, race-tested unit tests, gitleaks
-  secret scan, Trivy image scan (fails on CRITICAL/HIGH), GHCR push, cosign
-  keyless signing, and an SPDX SBOM via Syft.
-- **CD** (`.github/workflows/deploy.yml`): on green CI on `main`, assumes an AWS
-  role via GitHub OIDC and runs `helm upgrade` on the EC2 host through SSM
-  Send-Command — no SSH, no long-lived credentials.
+- **CI/CD** (`.github/workflows/ci-cd.yml`): one pipeline — lint + race-tested
+  unit tests, helm lint, gitleaks secret scan, Trivy image scan (fails on
+  CRITICAL/HIGH), GHCR push, cosign keyless signing, and an SPDX SBOM via Syft.
+  On a push to `main` a `deploy` job rolls the signed image out to the EC2 host
+  via GitHub OIDC + SSM Send-Command (no SSH, no long-lived credentials);
+  `helm --atomic` auto-rolls-back a bad image.
 - **Infrastructure** (`infra/terraform`): EC2 (t3.medium) + Elastic IP +
   security group (80/443 only, no SSH) + minikube bootstrap, plus the GitHub
   OIDC provider and a least-privilege deploy role scoped to this repo.

@@ -8,24 +8,23 @@ on EC2. Alerting and dashboard sections are added in Day 4.
 - **Host**: one EC2 instance (`t3.medium`, Amazon Linux 2023) in `eu-north-1`,
   fronted by an Elastic IP. Provisioned by `infra/terraform`.
 - **Cluster**: single-node minikube (docker driver), owned by `ec2-user`.
+  One release: `insiderone-devops-case` (default namespace).
 - **Access**: no SSH. Get a shell with
   `aws ssm start-session --target <instance-id> --region eu-north-1`.
 - **Public URL**: `http://<elastic-ip>/` (ingress catch-all → service → pods).
 
 ## Deploy
 
-Normal path is automatic: merge to `main` → CI → `Deploy` workflow → `helm
-upgrade` over SSM. To deploy a specific tag by hand, run the **Deploy** workflow
-with `workflow_dispatch` and an `image_tag` input (e.g. `sha-abc1234` or
-`v0.1.0`).
-
-Manual on-box equivalent (inside an SSM session, as ec2-user):
+Normal path is automatic: a push to `main` runs the `CI/CD` pipeline, and on
+green CI the final `deploy` job rolls the new image out via SSM (`helm --atomic`
+auto-rolls-back if it can't reach Ready). To deploy a specific tag by hand (or
+re-deploy after a fix), run it on the box inside an SSM session as ec2-user:
 
 ```sh
 cd /opt/app && git pull --ff-only
 helm upgrade --install insiderone-devops-case ./helm/insiderone-devops-case \
   -f helm/insiderone-devops-case/values-prod.yaml \
-  --set image.tag=sha-<short> --wait --timeout 3m
+  --set-string image.tag=sha-<short> --atomic --timeout 3m
 kubectl rollout status deployment/insiderone-devops-case --timeout=3m
 ```
 

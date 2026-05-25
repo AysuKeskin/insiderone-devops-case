@@ -48,3 +48,20 @@ costs roughly $30/month if left running, which we accept for a reliable demo.
 Cost mitigation: the Terraform stack is fully `terraform destroy`-able and
 the README documents the teardown command so the host can be shut down
 between demo windows.
+
+## ADR 009 - dev = local minikube, prod = EC2; no second cloud environment
+
+Status: Accepted
+
+The case asks for environment-specific config (`values-dev.yaml` vs
+`values-prod.yaml` differing on replicas, resources, host). We satisfy that
+with the two values files, and map them to where each one is actually used:
+`values-dev.yaml` drives the **local** minikube developer loop (`make
+rollout-dev`, 1 replica, debug logs) and `values-prod.yaml` is what the CD
+pipeline deploys to the **EC2** cluster. We deliberately do not also run a
+`dev` release on the same EC2 host: a single node gives no real isolation, so
+a second release would be theater rather than a distinct environment, and
+prod's `helm upgrade --atomic` already auto-rolls-back a bad image. A genuine
+cloud dev environment would be a separate cluster (or a manual approval gate
+between stages); both are out of scope for this single-node slice. The dev
+values are still exercised — locally and by the `helm lint` job in CI.
