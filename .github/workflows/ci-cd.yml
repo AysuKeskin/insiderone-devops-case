@@ -65,8 +65,7 @@ jobs:
     needs: [lint-and-test, secret-scan, helm-lint]
     permissions:
       contents: read
-      packages: write   # push to GHCR (only used on non-PR events)
-      id-token: write
+      packages: write   # push to GHCR (only used on non-PR events); auth via GITHUB_TOKEN
     outputs:
       digest: ${{ steps.push.outputs.digest }}
       tags: ${{ steps.meta.outputs.tags }}
@@ -76,9 +75,11 @@ jobs:
       - name: derive build args
         id: vars
         run: |
-          echo "version=$(git describe --tags --always --dirty)" >> "$GITHUB_OUTPUT"
-          echo "commit=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
-          echo "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+          {
+            echo "version=$(git describe --tags --always --dirty)"
+            echo "commit=$(git rev-parse --short HEAD)"
+            echo "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-buildx-action@v3
 
@@ -168,7 +169,7 @@ jobs:
     needs: [build-scan-push]
     if: github.event_name != 'pull_request'
     permissions:
-      contents: write
+      contents: read
       packages: write
       id-token: write
     steps:
@@ -182,8 +183,6 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: cosign sign (keyless, OIDC)
-        env:
-          COSIGN_EXPERIMENTAL: "1"
         run: |
           cosign sign --yes "${{ env.IMAGE }}@${{ needs.build-scan-push.outputs.digest }}"
 
@@ -192,13 +191,54 @@ jobs:
         with:
           image: ${{ env.IMAGE }}@${{ needs.build-scan-push.outputs.digest }}
           format: spdx-json
-          artifact-name: sbom.spdx.json
+          upload-artifact: false
           output-file: sbom.spdx.json
 
-      - name: attach SBOM to GitHub Release (tag builds only)
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.spdx.json
+
+  release:
+    name: GitHub release
+    runs-on: ubuntu-latest
+    needs: [sign-and-sbom]
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write   # create the GitHub Release
+    steps:
+      - uses: actions/checkout@v4   # for CHANGELOG
+
+      - name: download SBOM artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: sbom
+
+      # Pull this tag's version section out of CHANGELOG.md so the release notes
+      # are the changelog entry, not an empty body.
+      - name: extract release notes from CHANGELOG
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          VER="${VERSION#v}"
+          awk -v ver="$VER" '
+            $0 ~ "^## \\[" ver "\\]" {flag=1; print; next}
+            flag && /^## \[/ {exit}
+            flag {print}
+          ' CHANGELOG.md > release-notes.md
+          if [ ! -s release-notes.md ]; then
+            echo "::warning::no CHANGELOG section for $VER; using a default note"
+            echo "Release $VERSION" > release-notes.md
+          fi
+          echo "----- release notes -----"; cat release-notes.md
+
+      - name: create GitHub Release with notes + SBOM
         uses: softprops/action-gh-release@v2
         with:
+          name: ${{ github.ref_name }}
+          body_path: release-notes.md
           files: sbom.spdx.json
 
   deploy:
