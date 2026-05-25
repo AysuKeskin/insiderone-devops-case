@@ -25,7 +25,7 @@ timeout 90 bash -c 'until docker info >/dev/null 2>&1; do sleep 2; done'
 
 # --- kubectl -----------------------------------------------------------------
 if ! command -v kubectl >/dev/null 2>&1; then
-  curl -L "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" -o /usr/local/bin/kubectl
+  curl -L "https://dl.k8s.io/release/$${KUBECTL_VERSION}/bin/linux/amd64/kubectl" -o /usr/local/bin/kubectl
   chmod +x /usr/local/bin/kubectl
 fi
 
@@ -36,7 +36,7 @@ fi
 
 # --- minikube ----------------------------------------------------------------
 if ! command -v minikube >/dev/null 2>&1; then
-  curl -L "https://github.com/kubernetes/minikube/releases/download/${MINIKUBE_VERSION}/minikube-linux-amd64" -o /usr/local/bin/minikube
+  curl -L "https://github.com/kubernetes/minikube/releases/download/$${MINIKUBE_VERSION}/minikube-linux-amd64" -o /usr/local/bin/minikube
   chmod +x /usr/local/bin/minikube
 fi
 

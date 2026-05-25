@@ -82,7 +82,7 @@ jobs:
 
           PARAMS=$(jq -n --arg tag "$TAG" '{
             commands: [
-              "runuser -l ec2-user -c \"cd /opt/app && git pull --ff-only && helm upgrade --install insiderone-devops-case ./helm/insiderone-devops-case -f helm/insiderone-devops-case/values-prod.yaml --set-string image.tag=\($tag) --wait --atomic --timeout 3m && kubectl rollout status deployment/insiderone-devops-case --timeout=3m\""
+              "runuser -l ec2-user -c \"cd /opt/app && git pull --ff-only && helm upgrade --install insiderone-devops-case ./helm/insiderone-devops-case -f helm/insiderone-devops-case/values-prod.yaml --set-string image.tag=\($tag) --wait --atomic --timeout 8m && kubectl rollout status deployment/insiderone-devops-case --timeout=8m\""
             ]
           }')
 
@@ -94,7 +94,7 @@ jobs:
             --query "Command.CommandId" --output text)
           echo "SSM command id: $CMD_ID"
 
-          for _ in $(seq 1 36); do
+          for _ in $(seq 1 90); do
             sleep 10
             STATUS=$(aws ssm get-command-invocation \
               --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" \
@@ -103,6 +103,9 @@ jobs:
             case "$STATUS" in
               Success) break ;;
               Failed|Cancelled|TimedOut)
+                echo "::group::stdout from EC2"
+                aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" --query StandardOutputContent --output text
+                echo "::endgroup::"
                 echo "::group::stderr from EC2"
                 aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" --query StandardErrorContent --output text
                 echo "::endgroup::"
