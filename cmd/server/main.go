@@ -19,6 +19,7 @@ import (
 	"github.com/AysuKeskin/insiderone-devops-case/internal/handlers"
 	"github.com/AysuKeskin/insiderone-devops-case/internal/middleware"
 	"github.com/AysuKeskin/insiderone-devops-case/internal/version"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 const (
@@ -51,10 +52,12 @@ func main() {
 	mux.HandleFunc("GET /healthz", handlers.Healthz)
 	mux.Handle("GET /readyz", handlers.Readyz(&ready))
 	mux.HandleFunc("GET /version", handlers.Version)
+	mux.Handle("GET /metrics", promhttp.Handler())
 
-	// Order matters: RequestID must be outermost so AccessLog can pull
-	// the id from context when emitting the request log line.
-	handler := middleware.RequestID(middleware.AccessLog(logger)(mux))
+	// Order matters: RequestID must be outermost so AccessLog can pull the id
+	// from context. Metrics wraps the mux directly so r.Pattern (the matched
+	// route) is set by the time it records the observation.
+	handler := middleware.RequestID(middleware.AccessLog(logger)(middleware.Metrics(mux)))
 
 	srv := &http.Server{
 		Addr:              addr,

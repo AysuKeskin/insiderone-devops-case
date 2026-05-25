@@ -13,7 +13,7 @@ End-to-end slice: app → container → Helm/minikube → CI/CD → observabilit
 | GET | `/healthz` | liveness probe (always 200 if process is up) |
 | GET | `/readyz` | readiness probe (503 during shutdown drain) |
 | GET | `/version` | build info: version, commit, built_at |
-| GET | `/metrics` | Prometheus exposition (added Day 4) |
+| GET | `/metrics` | Prometheus exposition: `http_requests_total`, `http_request_duration_seconds`, Go/process collectors |
 
 ## Quick start
 
