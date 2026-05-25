@@ -115,7 +115,7 @@ A replacement pod was scheduled within ~2 seconds and reached `Ready` shortly af
 
 ## Cloud infrastructure
 
-Track A target: a single EC2 host in `eu-central-1` running minikube, reachable on an Elastic IP. Provisioned with Terraform under `infra/terraform/`.
+Track A target: a single EC2 host in `eu-north-1` running minikube, reachable on an Elastic IP. Provisioned with Terraform under `infra/terraform/`.
 
 ```sh
 cd infra/terraform
@@ -125,7 +125,7 @@ terraform output            # AWS_REGION, AWS_ROLE_ARN, EC2_INSTANCE_ID for GH s
 terraform destroy           # full teardown when the demo window is closed
 ```
 
-The stack is intentionally narrow: no SSH (port 22 is closed at the SG), no long-lived AWS keys (GitHub Actions assumes the `gha_deploy` role via OIDC), and no GHCR secret on the host (the image is published as a public package, so minikube pulls anonymously). See `docs/adr/day-3-decisions.md` for the deploy-via-SSM and `t3.small` tradeoffs.
+The stack is intentionally narrow: no SSH (port 22 is closed at the SG), no long-lived AWS keys (GitHub Actions assumes the `gha_deploy` role via OIDC), and no GHCR secret on the host (the image is published as a public package, so minikube pulls anonymously). See `docs/adr/day-3-decisions.md` for the deploy-via-SSM and `t3.medium` tradeoffs.
 
 ## Layout
 
@@ -139,5 +139,5 @@ helm/insiderone-devops-case/
                    Secret, HPA, values-dev.yaml, values-prod.yaml
 docs/evidence/     command output evidence: helm history, rollout, rollback, chaos
 infra/terraform/   EC2, EIP, SG, IAM OIDC role (Track A)
-.github/workflows/ (Day 3) CI + deploy
+.github/workflows/ ci-cd.yml: build → scan → sign → push → SSM deploy
 ```
