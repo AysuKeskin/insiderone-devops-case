@@ -35,7 +35,7 @@ jobs:
       - name: go test (race + cover)
         run: go test ./... -race -cover
 
-  gitleaks:
+  secret-scan:
     name: secret scan
     runs-on: ubuntu-latest
     steps:
@@ -59,10 +59,17 @@ jobs:
           helm lint helm/insiderone-devops-case -f helm/insiderone-devops-case/values-dev.yaml
           helm lint helm/insiderone-devops-case -f helm/insiderone-devops-case/values-prod.yaml
 
-  build-and-scan:
-    name: build image and Trivy scan
+  build-scan-push:
+    name: build, scan, push
     runs-on: ubuntu-latest
-    needs: [lint-and-test, gitleaks, helm-lint]
+    needs: [lint-and-test, secret-scan, helm-lint]
+    permissions:
+      contents: read
+      packages: write   # push to GHCR (only used on non-PR events)
+      id-token: write
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
+      tags: ${{ steps.meta.outputs.tags }}
     steps:
       - uses: actions/checkout@v4
 
@@ -75,13 +82,29 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
-      - name: build image (load, do not push)
+      - name: derive image tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=sha,format=short
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      # Build once into the local docker so Trivy can scan it before anything is
+      # published. The layer cache is saved so the push step below reuses it
+      # instead of recompiling.
+      - name: build image for scan (local, not pushed)
         uses: docker/build-push-action@v6
         with:
           context: .
           load: true
           push: false
           tags: local/insiderone-devops-case:scan
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           build-args: |
             VERSION=${{ steps.vars.outputs.version }}
             COMMIT=${{ steps.vars.outputs.commit }}
@@ -97,50 +120,19 @@ jobs:
           vuln-type: os,library
           format: table
 
-  push:
-    name: push to GHCR
-    runs-on: ubuntu-latest
-    needs: [lint-and-test, gitleaks, build-and-scan]
-    if: github.event_name != 'pull_request'
-    permissions:
-      contents: read
-      packages: write
-      id-token: write
-    outputs:
-      digest: ${{ steps.build.outputs.digest }}
-      tags: ${{ steps.meta.outputs.tags }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: derive build args
-        id: vars
-        run: |
-          echo "version=$(git describe --tags --always --dirty)" >> "$GITHUB_OUTPUT"
-          echo "commit=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
-          echo "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
-
-      - uses: docker/setup-buildx-action@v3
-
+      # Everything below only runs once the scan passes, and only off PRs:
+      # PRs validate + scan but never publish.
       - name: log in to GHCR
+        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: derive image tags
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.IMAGE }}
-          tags: |
-            type=sha,format=short
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-
-      - name: build and push
-        id: build
+      - name: push scanned image to GHCR
+        id: push
+        if: github.event_name != 'pull_request'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -148,15 +140,32 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           provenance: false
+          cache-from: type=gha   # reuses the scan build's layers — no recompile
           build-args: |
             VERSION=${{ steps.vars.outputs.version }}
             COMMIT=${{ steps.vars.outputs.commit }}
             BUILT_AT=${{ steps.vars.outputs.built_at }}
 
+      - name: report outcome
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "::notice::PR build — image scanned (no CRITICAL/HIGH), not published"
+          else
+            echo "::notice::published ${{ env.IMAGE }}@${{ steps.push.outputs.digest }}"
+            {
+              echo "### Image published"
+              echo "- digest: \`${{ steps.push.outputs.digest }}\`"
+              echo '- tags:'
+              echo '```'
+              echo "${{ steps.meta.outputs.tags }}"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
   sign-and-sbom:
     name: cosign sign and Syft SBOM
     runs-on: ubuntu-latest
-    needs: [push]
+    needs: [build-scan-push]
     if: github.event_name != 'pull_request'
     permissions:
       contents: write
@@ -176,12 +185,12 @@ jobs:
         env:
           COSIGN_EXPERIMENTAL: "1"
         run: |
-          cosign sign --yes "${{ env.IMAGE }}@${{ needs.push.outputs.digest }}"
+          cosign sign --yes "${{ env.IMAGE }}@${{ needs.build-scan-push.outputs.digest }}"
 
       - name: generate SPDX SBOM with Syft
         uses: anchore/sbom-action@v0
         with:
-          image: ${{ env.IMAGE }}@${{ needs.push.outputs.digest }}
+          image: ${{ env.IMAGE }}@${{ needs.build-scan-push.outputs.digest }}
           format: spdx-json
           artifact-name: sbom.spdx.json
           output-file: sbom.spdx.json
@@ -192,21 +201,18 @@ jobs:
         with:
           files: sbom.spdx.json
 
-  # Smoke gate: deploy the new image to a throwaway `dev` release first. If the
-  # chart/image can't reach Ready with dev values, prod is never touched.
-  deploy-dev:
-    name: deploy to dev (smoke gate)
+  deploy:
+    name: deploy to EC2 minikube
     runs-on: ubuntu-latest
-    needs: [push, sign-and-sbom]
+    needs: [build-scan-push, sign-and-sbom]
+    # Auto-deploy only on a push to main. Tag pushes (v*) are released and
+    # signed but not re-deployed — that commit already shipped when it hit main.
+    # A bad image is auto-rolled-back on the box by helm --atomic.
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       id-token: write   # assume the AWS deploy role via OIDC
       contents: read
-    outputs:
-      tag: ${{ steps.tag.outputs.tag }}
     steps:
-      - uses: actions/checkout@v4
-
       - name: resolve and validate image tag
         id: tag
         env:
@@ -221,7 +227,7 @@ jobs:
             exit 1
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "::notice::Image tag: $TAG (signed digest ${{ needs.push.outputs.digest }})"
+          echo "::notice::Image tag: $TAG (signed digest ${{ needs.build-scan-push.outputs.digest }})"
 
       - name: configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -229,59 +235,26 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: helm upgrade (dev release) via SSM
+      - name: helm upgrade via SSM
         uses: ./.github/actions/ssm-deploy
         with:
           instance-id: ${{ secrets.EC2_INSTANCE_ID }}
-          label: deploy-dev
-          command: >-
-            cd /opt/app && git pull --ff-only &&
-            helm upgrade --install insiderone-devops-case-dev ./helm/insiderone-devops-case
-            -f helm/insiderone-devops-case/values-dev.yaml
-            --namespace dev --create-namespace
-            --set-string image.tag=${{ steps.tag.outputs.tag }}
-            --set ingress.enabled=false --atomic --timeout 3m &&
-            kubectl -n dev rollout status deployment/insiderone-devops-case-dev --timeout=3m &&
-            echo === dev pods === &&
-            kubectl -n dev get pods -o wide
-
-  deploy-prod:
-    name: deploy to prod (EC2 minikube)
-    runs-on: ubuntu-latest
-    needs: [deploy-dev]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    permissions:
-      id-token: write
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: ${{ secrets.AWS_REGION }}
-
-      - name: helm upgrade (prod release) via SSM
-        uses: ./.github/actions/ssm-deploy
-        with:
-          instance-id: ${{ secrets.EC2_INSTANCE_ID }}
-          label: deploy-prod
+          label: deploy
           command: >-
             cd /opt/app && git pull --ff-only &&
             helm upgrade --install insiderone-devops-case ./helm/insiderone-devops-case
             -f helm/insiderone-devops-case/values-prod.yaml
-            --set-string image.tag=${{ needs.deploy-dev.outputs.tag }}
+            --set-string image.tag=${{ steps.tag.outputs.tag }}
             --atomic --timeout 3m &&
             kubectl rollout status deployment/insiderone-devops-case --timeout=3m &&
             echo === helm history === && helm history insiderone-devops-case --max 5 &&
-            echo === prod pods === &&
+            echo === pods === &&
             kubectl get pods -l app.kubernetes.io/name=insiderone-devops-case -o wide
 
       - name: deploy summary
         run: |
           {
             echo "### Deploy succeeded"
-            echo "- tag: \`${{ needs.deploy-dev.outputs.tag }}\`"
+            echo "- tag: \`${{ steps.tag.outputs.tag }}\`"
             echo "- verify: \`curl http://<elastic-ip>/version\`"
           } >> "$GITHUB_STEP_SUMMARY"

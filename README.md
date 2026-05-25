@@ -85,6 +85,19 @@ instead, or CI can override it explicitly.
 
 The `values-dev.yaml` and `values-prod.yaml` deliberately differ on replica count, log level, resources, ingress host, and HPA settings — see those files for the deltas. Resource requests/limits are conservative starting estimates for a static Go binary that idles near zero CPU and ~10 Mi memory; dev sits at the floor (50m / 64Mi requests) and prod doubles both for traffic headroom. They will be tuned against real `kubectl top pod` numbers once load is generated in Day 4.
 
+### Environments: dev = local, prod = cloud
+
+The two values files map to where each is actually run:
+
+| | `values-dev.yaml` | `values-prod.yaml` |
+|---|---|---|
+| Runs on | local minikube (laptop) | EC2 minikube (cloud) |
+| Driven by | `make rollout-dev` | the CD pipeline |
+| Replicas / logs | 1 / debug | 3 + HPA / info |
+| Ingress | `tiny.dev.local` | hostless (raw Elastic IP) |
+
+`dev` is the local developer loop; `prod` is the real cloud target. We intentionally do **not** run a second `dev` release on the same EC2 host — one node gives no real isolation, so it would be a duplicate rather than a distinct environment, and prod's `helm --atomic` already guards against a bad image. See `docs/adr/day-3-decisions.md` (ADR 009).
+
 ### Rollout strategy
 
 Deployments use an explicit `RollingUpdate` with `maxSurge: 1, maxUnavailable: 0`. The intent is **safe and verifiable rollout/rollback over raw speed** — we'd rather have a predictable pod footprint in small clusters (minikube on a laptop, single-node EC2) than save a handful of seconds by surging to 2× replicas. Even when HPA scales us to 10 replicas, only one extra pod ever exists during a rollout. At `maxUnavailable: 0` the chart never drops below desired capacity, so client requests keep flowing while the new image takes over. This pairs with the app's graceful SIGTERM drain to deliver true zero-downtime rollouts.

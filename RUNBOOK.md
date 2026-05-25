@@ -8,19 +8,17 @@ on EC2. Alerting and dashboard sections are added in Day 4.
 - **Host**: one EC2 instance (`t3.medium`, Amazon Linux 2023) in `eu-north-1`,
   fronted by an Elastic IP. Provisioned by `infra/terraform`.
 - **Cluster**: single-node minikube (docker driver), owned by `ec2-user`.
-  Two releases: `insiderone-devops-case` (prod, default namespace) and
-  `insiderone-devops-case-dev` (smoke gate, `dev` namespace, no ingress).
+  One release: `insiderone-devops-case` (default namespace).
 - **Access**: no SSH. Get a shell with
   `aws ssm start-session --target <instance-id> --region eu-north-1`.
-- **Public URL**: `http://<elastic-ip>/` (ingress catch-all → prod service → pods).
+- **Public URL**: `http://<elastic-ip>/` (ingress catch-all → service → pods).
 
 ## Deploy
 
-Normal path is automatic: a push to `main` runs the `CI/CD` pipeline. On green
-CI it deploys via SSM in two stages — `deploy-dev` installs the new image into
-the `dev` namespace as a smoke test, and `deploy-prod` only runs if dev reached
-Ready. To deploy a specific tag by hand (or re-deploy after a fix), run it on
-the box inside an SSM session as ec2-user:
+Normal path is automatic: a push to `main` runs the `CI/CD` pipeline, and on
+green CI the final `deploy` job rolls the new image out via SSM (`helm --atomic`
+auto-rolls-back if it can't reach Ready). To deploy a specific tag by hand (or
+re-deploy after a fix), run it on the box inside an SSM session as ec2-user:
 
 ```sh
 cd /opt/app && git pull --ff-only

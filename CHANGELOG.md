@@ -26,9 +26,9 @@ container, deploys to minikube on EC2 through CI/CD, and exposes a public URL.
 - **CI/CD** (`.github/workflows/ci-cd.yml`): one pipeline — lint + race-tested
   unit tests, helm lint, gitleaks secret scan, Trivy image scan (fails on
   CRITICAL/HIGH), GHCR push, cosign keyless signing, and an SPDX SBOM via Syft.
-  On a push to `main` it deploys via GitHub OIDC + SSM Send-Command (no SSH, no
-  long-lived credentials): first a `dev` release as a smoke gate, then `prod`
-  only if dev reached Ready.
+  On a push to `main` a `deploy` job rolls the signed image out to the EC2 host
+  via GitHub OIDC + SSM Send-Command (no SSH, no long-lived credentials);
+  `helm --atomic` auto-rolls-back a bad image.
 - **Infrastructure** (`infra/terraform`): EC2 (t3.medium) + Elastic IP +
   security group (80/443 only, no SSH) + minikube bootstrap, plus the GitHub
   OIDC provider and a least-privilege deploy role scoped to this repo.
