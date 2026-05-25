@@ -1,0 +1,68 @@
+name: SSM deploy
+description: >-
+  Run a shell command on an EC2 instance as ec2-user via SSM Send-Command,
+  stream status, and fail the step unless the command reports Success.
+  Requires AWS credentials to already be configured in the job (OIDC).
+
+inputs:
+  instance-id:
+    description: Target EC2 instance ID.
+    required: true
+  command:
+    description: >-
+      Shell command to run as ec2-user on the box. Must not contain double
+      quotes — it is wrapped in `runuser -l ec2-user -c "<command>"`.
+    required: true
+  label:
+    description: Short label used in log lines.
+    required: false
+    default: deploy
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        INSTANCE_ID: ${{ inputs.instance-id }}
+        COMMAND: ${{ inputs.command }}
+        LABEL: ${{ inputs.label }}
+      run: |
+        set -euo pipefail
+
+        # Run as ec2-user (cluster owner); SSM Agent itself runs as root.
+        FULL="runuser -l ec2-user -c \"$COMMAND\""
+        PARAMS=$(jq -n --arg cmd "$FULL" '{commands: [$cmd]}')
+
+        CMD_ID=$(aws ssm send-command \
+          --instance-ids "$INSTANCE_ID" \
+          --document-name "AWS-RunShellScript" \
+          --comment "$LABEL" \
+          --parameters "$PARAMS" \
+          --query "Command.CommandId" --output text)
+        echo "::notice::[$LABEL] SSM command id: $CMD_ID"
+
+        START=$(date +%s)
+        STATUS="Pending"
+        for _ in $(seq 1 36); do
+          sleep 10
+          STATUS=$(aws ssm get-command-invocation \
+            --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" \
+            --query Status --output text 2>/dev/null || echo Pending)
+          echo "[$(date -u +%H:%M:%S)Z | $(( $(date +%s) - START ))s] [$LABEL] status: $STATUS"
+          case "$STATUS" in
+            Success|Failed|Cancelled|TimedOut) break ;;
+          esac
+        done
+
+        echo "::group::[$LABEL] EC2 stdout"
+        aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" --query StandardOutputContent --output text || true
+        echo "::endgroup::"
+        echo "::group::[$LABEL] EC2 stderr"
+        aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" --query StandardErrorContent --output text || true
+        echo "::endgroup::"
+
+        if [ "$STATUS" != "Success" ]; then
+          echo "::error::[$LABEL] did not succeed (final status: $STATUS)"
+          exit 1
+        fi
+        echo "::notice::[$LABEL] succeeded"

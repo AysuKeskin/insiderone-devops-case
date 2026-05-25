@@ -1,4 +1,4 @@
-name: CI
+name: CI/CD
 
 on:
   pull_request:
@@ -8,7 +8,7 @@ on:
     tags: ["v*"]
 
 # Default token: read-only. Jobs that need more (push to GHCR, OIDC for
-# cosign) escalate their own permissions.
+# cosign and the EC2 deploy) escalate their own permissions.
 permissions:
   contents: read
 
@@ -48,10 +48,21 @@ jobs:
           GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
           GITLEAKS_ENABLE_SUMMARY: "true"
 
+  helm-lint:
+    name: helm lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - name: lint chart against dev and prod values
+        run: |
+          helm lint helm/insiderone-devops-case -f helm/insiderone-devops-case/values-dev.yaml
+          helm lint helm/insiderone-devops-case -f helm/insiderone-devops-case/values-prod.yaml
+
   build-and-scan:
     name: build image and Trivy scan
     runs-on: ubuntu-latest
-    needs: [lint-and-test, gitleaks]
+    needs: [lint-and-test, gitleaks, helm-lint]
     steps:
       - uses: actions/checkout@v4
 
@@ -180,3 +191,97 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: sbom.spdx.json
+
+  # Smoke gate: deploy the new image to a throwaway `dev` release first. If the
+  # chart/image can't reach Ready with dev values, prod is never touched.
+  deploy-dev:
+    name: deploy to dev (smoke gate)
+    runs-on: ubuntu-latest
+    needs: [push, sign-and-sbom]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      id-token: write   # assume the AWS deploy role via OIDC
+      contents: read
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: resolve and validate image tag
+        id: tag
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          TAG="sha-${SHA:0:7}"
+          # Defense in depth: TAG ends up in a remote shell command, so accept
+          # only the sha-<hex> shape CI publishes.
+          if ! printf '%s' "$TAG" | grep -Eq '^sha-[0-9a-f]{7,40}$'; then
+            echo "::error::refusing to deploy untrusted tag: '$TAG'"
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "::notice::Image tag: $TAG (signed digest ${{ needs.push.outputs.digest }})"
+
+      - name: configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: helm upgrade (dev release) via SSM
+        uses: ./.github/actions/ssm-deploy
+        with:
+          instance-id: ${{ secrets.EC2_INSTANCE_ID }}
+          label: deploy-dev
+          command: >-
+            cd /opt/app && git pull --ff-only &&
+            helm upgrade --install insiderone-devops-case-dev ./helm/insiderone-devops-case
+            -f helm/insiderone-devops-case/values-dev.yaml
+            --namespace dev --create-namespace
+            --set-string image.tag=${{ steps.tag.outputs.tag }}
+            --set ingress.enabled=false --atomic --timeout 3m &&
+            kubectl -n dev rollout status deployment/insiderone-devops-case-dev --timeout=3m &&
+            echo === dev pods === &&
+            kubectl -n dev get pods -o wide
+
+  deploy-prod:
+    name: deploy to prod (EC2 minikube)
+    runs-on: ubuntu-latest
+    needs: [deploy-dev]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: helm upgrade (prod release) via SSM
+        uses: ./.github/actions/ssm-deploy
+        with:
+          instance-id: ${{ secrets.EC2_INSTANCE_ID }}
+          label: deploy-prod
+          command: >-
+            cd /opt/app && git pull --ff-only &&
+            helm upgrade --install insiderone-devops-case ./helm/insiderone-devops-case
+            -f helm/insiderone-devops-case/values-prod.yaml
+            --set-string image.tag=${{ needs.deploy-dev.outputs.tag }}
+            --atomic --timeout 3m &&
+            kubectl rollout status deployment/insiderone-devops-case --timeout=3m &&
+            echo === helm history === && helm history insiderone-devops-case --max 5 &&
+            echo === prod pods === &&
+            kubectl get pods -l app.kubernetes.io/name=insiderone-devops-case -o wide
+
+      - name: deploy summary
+        run: |
+          {
+            echo "### Deploy succeeded"
+            echo "- tag: \`${{ needs.deploy-dev.outputs.tag }}\`"
+            echo "- verify: \`curl http://<elastic-ip>/version\`"
+          } >> "$GITHUB_STEP_SUMMARY"
