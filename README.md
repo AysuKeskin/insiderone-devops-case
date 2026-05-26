@@ -91,7 +91,7 @@ this local minikube flow, because the image is loaded directly into minikube.
 For the later EC2/GHCR deployment, the chart default `IfNotPresent` is used
 instead, or CI can override it explicitly.
 
-The `values-dev.yaml` and `values-prod.yaml` deliberately differ on replica count, log level, resources, ingress host, and HPA settings — see those files for the deltas. Resource requests/limits are conservative starting estimates for a static Go binary that idles near zero CPU and ~10 Mi memory; dev sits at the floor (50m / 64Mi requests) and prod doubles both for traffic headroom. They will be tuned against real `kubectl top pod` numbers once load is generated in Day 4.
+The `values-dev.yaml` and `values-prod.yaml` deliberately differ on replica count, log level, resources, ingress host, and HPA settings — see those files for the deltas. Resource requests/limits are conservative starting estimates for a static Go binary that idles near zero CPU and ~10 Mi memory; dev sits at the floor (50m / 64Mi requests) and prod doubles both for traffic headroom. They can be tuned against real `kubectl top pod` numbers under sustained load.
 
 ### Environments: dev = local, prod = cloud
 
@@ -104,11 +104,11 @@ The two values files map to where each is actually run:
 | Replicas / logs | 1 / debug | 3 + HPA / info |
 | Ingress | `tiny.dev.local` | `devops-case.aysu-keskin.uk` (HTTPS) + raw-IP catch-all |
 
-`dev` is the local developer loop; `prod` is the real cloud target. We intentionally do **not** run a second `dev` release on the same EC2 host — one node gives no real isolation, so it would be a duplicate rather than a distinct environment, and prod's `helm --atomic` already guards against a bad image. See `docs/adr/day-3-decisions.md` (ADR 009).
+`dev` is the local developer loop; `prod` is the real cloud target. I intentionally do **not** run a second `dev` release on the same EC2 host — one node gives no real isolation, so it would be a duplicate rather than a distinct environment, and prod's `helm --atomic` already guards against a bad image. See `docs/adr/day-3-decisions.md` (ADR 009).
 
 ### Rollout strategy
 
-Deployments use an explicit `RollingUpdate` with `maxSurge: 1, maxUnavailable: 0`. The intent is **safe and verifiable rollout/rollback over raw speed** — we'd rather have a predictable pod footprint in small clusters (minikube on a laptop, single-node EC2) than save a handful of seconds by surging to 2× replicas. Even when HPA scales us to 10 replicas, only one extra pod ever exists during a rollout. At `maxUnavailable: 0` the chart never drops below desired capacity, so client requests keep flowing while the new image takes over. This pairs with the app's graceful SIGTERM drain to deliver true zero-downtime rollouts.
+Deployments use an explicit `RollingUpdate` with `maxSurge: 1, maxUnavailable: 0`. The intent is **safe and verifiable rollout/rollback over raw speed** — I'd rather have a predictable pod footprint in small clusters (minikube on a laptop, single-node EC2) than save a handful of seconds by surging to 2× replicas. Even when HPA scales the deployment to 10 replicas, only one extra pod ever exists during a rollout. At `maxUnavailable: 0` the chart never drops below desired capacity, so client requests keep flowing while the new image takes over. This pairs with the app's graceful SIGTERM drain to deliver true zero-downtime rollouts.
 
 ### Rollout & rollback exercise
 
@@ -175,7 +175,7 @@ helm upgrade --install insiderone-devops-case helm/insiderone-devops-case \
   --set image.pullPolicy=Never \
   --set metrics.serviceMonitor.enabled=true \
   --set metrics.prometheusRule.enabled=true
-make monitoring-prometheus               # localhost:9090 → Status/Targets shows our endpoint UP
+make monitoring-prometheus               # localhost:9090 → Status/Targets shows the app endpoint UP
 make monitoring-grafana                  # localhost:3000 → import docs/dashboards/insiderone-http.json
 make load-gen                            # generate traffic so the panels move
 ```
@@ -197,7 +197,7 @@ Evidence captured from a local run:
 Beyond the core slice: three "going further" items (#2, #4, #6) plus the Day 2 HPA bonus — each with a note on how and what it taught:
 
 - **Supply chain** — CI signs every image with cosign (keyless OIDC), produces a Syft SPDX SBOM, and binds it to the image with `cosign attest`. *Learned:* keyless signing needs `id-token: write`, and an SBOM is far more useful as an attestation (verifiable against the digest) than a loose file. Verify commands in [SECURITY.md](SECURITY.md).
-- **Custom domain + TLS** — HTTPS via cert-manager + Let's Encrypt with a DNS-01 (Cloudflare) challenge; the ingress terminates TLS behind Cloudflare Full (strict). *Learned:* DNS-01 is far more robust than HTTP-01 behind a Cloudflare proxy, and a token with a trailing newline surfaces as Cloudflare error 6111 (header format), not an auth error. Setup in [RUNBOOK.md](RUNBOOK.md) → "TLS / HTTPS".
+- **Custom domain + TLS** — HTTPS via cert-manager + Let's Encrypt with a DNS-01 (Cloudflare) challenge; the ingress terminates TLS behind Cloudflare Full (strict). *Learned:* DNS-01 is far more reliable than HTTP-01 behind a Cloudflare proxy, and a token with a trailing newline surfaces as Cloudflare error 6111 (header format), not an auth error. Setup in [RUNBOOK.md](RUNBOOK.md) → "TLS / HTTPS".
 - **Chaos test** — killed a pod and watched the Deployment self-heal (see [Chaos test](#chaos-test) above). *Learned:* the controller reacts to the desired-vs-actual delta immediately, so drain and new-pod startup overlap cleanly.
 - **HPA (Day 2 bonus)** — CPU-based autoscaling, min 3 / max 10 at 70%. *Learned:* HPA needs metrics-server + resource requests to compute utilization, and `minReplicas` is a hard floor independent of CPU.
 

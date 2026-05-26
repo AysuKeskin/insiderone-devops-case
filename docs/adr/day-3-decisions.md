@@ -8,17 +8,17 @@ infrastructure, and deploy-time auth.
 Status: Accepted
 
 The deploy workflow runs `helm upgrade` on the EC2 host through AWS Systems
-Manager Send-Command rather than SSH. SSH would require storing a long-lived
-private key as a GitHub secret, which directly contradicts the case's
-"no long-lived credentials" guidance. SSM lets GitHub Actions assume an OIDC
-role and trigger a shell command on the instance using only short-lived
-credentials; the security group can also close port 22 entirely, shrinking
-the public attack surface. Tradeoff: Send-Command is asynchronous and harder
-to stream output from than `ssh -t`, so the workflow polls
-`ssm:GetCommandInvocation` until the command resolves. One operational
-consequence: SSM runs commands as root, but the cluster is owned by
-`ec2-user` (kubeconfig and docker group), so the deploy command must wrap
-itself in `runuser -l ec2-user -c '...'` to reach minikube.
+Manager Send-Command rather than SSH. SSH would mean storing a long-lived
+private key as a GitHub secret, which contradicts the case's "no long-lived
+credentials" guidance. With SSM, GitHub Actions assumes an OIDC role and runs a
+shell command on the instance using only short-lived credentials, and the
+security group can close port 22 entirely.
+
+Two consequences worth noting. Send-Command is asynchronous, so the workflow
+polls `ssm:GetCommandInvocation` until the command resolves instead of streaming
+output like `ssh -t`. And SSM runs commands as root while the cluster is owned by
+`ec2-user` (kubeconfig, docker group), so the deploy command wraps itself in
+`runuser -l ec2-user -c '...'` to reach minikube.
 
 ## ADR 007 - Helm Upgrade from CI instead of GitOps
 
@@ -41,9 +41,9 @@ metrics-server + the app cannot run reliably under 2 GB; the kubelet
 OOM-kills components during bootstrap and the cluster never reaches Ready.
 On `t3.small` the host has no headroom after the OS and Docker, so minikube
 is started with 3 GB on `t3.medium` to leave a stable margin. `t3.medium`
-costs roughly $30/month if left running, which we accept for a reliable demo.
-Cost mitigation: the Terraform stack is fully `terraform destroy`-able and
-the README documents the teardown command so the host can be shut down
+costs roughly $30/month if left running, which I accept for a reliable demo.
+To keep that cost in check, the Terraform stack is fully `terraform destroy`-able
+and the README documents the teardown command, so the host can be shut down
 between demo windows.
 
 ## ADR 009 - dev = local minikube, prod = EC2; no second cloud environment
@@ -51,11 +51,11 @@ between demo windows.
 Status: Accepted
 
 The case asks for environment-specific config (`values-dev.yaml` vs
-`values-prod.yaml` differing on replicas, resources, host). We satisfy that
+`values-prod.yaml` differing on replicas, resources, host). I satisfy that
 with the two values files, and map them to where each one is actually used:
 `values-dev.yaml` drives the **local** minikube developer loop (`make
 rollout-dev`, 1 replica, debug logs) and `values-prod.yaml` is what the CD
-pipeline deploys to the **EC2** cluster. We deliberately do not also run a
+pipeline deploys to the **EC2** cluster. I deliberately do not also run a
 `dev` release on the same EC2 host: a single node gives no real isolation, so
 a second release would be theater rather than a distinct environment, and
 prod's `helm upgrade --atomic` already auto-rolls-back a bad image. The dev

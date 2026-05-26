@@ -8,17 +8,20 @@ Numbering continues from `day-3-decisions.md`.
 Status: Accepted
 
 Metrics, dashboards, and alerting use the `kube-prometheus-stack` Helm chart
-(Prometheus + Grafana + Alertmanager + the Prometheus Operator) rather than
-hand-rolled deployments, because one install gives a working, well-supported
-stack and the Operator's `ServiceMonitor`/`PrometheusRule` CRDs let the app
-declare its own scrape config and alerts from inside its chart. We run the stack
-on **local minikube**, not the EC2 host: the `t3.medium` (4 GB) already runs the
-app plus minikube's control plane, and the full monitoring stack wants ~2 GB more
-than is comfortable there. The case deliverable is a dashboard screenshot and an
-alert, both of which the local stack satisfies, and this matches the
-dev=local / prod=cloud split (ADR 009). Tradeoff: there is no always-on hosted
-Grafana; a production setup would run monitoring on its own node or ship metrics
-to a hosted backend (Grafana Cloud, Amazon Managed Prometheus).
+(Prometheus + Grafana + Alertmanager + the Prometheus Operator) instead of
+hand-rolled manifests. One install gives a working stack, and the Operator's
+`ServiceMonitor`/`PrometheusRule` CRDs let the app declare its own scrape config
+and alerts from inside its own chart.
+
+I run the stack on **local minikube**, not the EC2 host. The `t3.medium` (4 GB)
+already carries the app and minikube's control plane, and the full monitoring
+stack wants roughly 2 GB more than fits comfortably there. The deliverable is a
+dashboard screenshot and one alert, both of which the local stack covers, and
+this lines up with the dev=local / prod=cloud split (ADR 009).
+
+The cost: no always-on hosted Grafana. A production setup would give monitoring
+its own node or ship metrics to a hosted backend (Grafana Cloud, Amazon Managed
+Prometheus).
 
 ## ADR 011 - Metrics use the matched route, not the raw path, as a label
 
@@ -37,16 +40,17 @@ Prometheus's own scrapes don't inflate the RPS panels.
 
 Status: Accepted
 
-The public endpoint is served over HTTPS on a custom domain (Going further #6).
-The origin certificate is issued by cert-manager from Let's Encrypt and the
-ingress (`ingress-nginx`) terminates TLS; Cloudflare sits in front in
-**Full (strict)** mode, so the connection is encrypted browser→Cloudflare and
-Cloudflare→origin. We chose the **DNS-01** ACME challenge (Cloudflare API token)
-over HTTP-01 because DNS-01 works regardless of Cloudflare's proxy state — an
-HTTP-01 challenge has to reach the origin on port 80, which is awkward when the
-orange-cloud proxy and Full-strict are both on. TLS is **opt-in** in the chart
-(`ingress.tls.*`, off by default in the base values, on in `values-prod.yaml`).
-The chart still emits a catch-all rule alongside the host rule, so the raw IP
-keeps answering over HTTP. Tradeoff: a Cloudflare API token now lives as a cluster
-secret (scoped to Zone:DNS:Edit), and cert-manager is one more component on the
-EC2 node.
+The public endpoint runs over HTTPS on a custom domain.
+cert-manager requests a Let's Encrypt certificate and ingress-nginx terminates
+TLS at the origin. Cloudflare sits in front in **Full (strict)** mode, so traffic
+is encrypted on both legs: browser to Cloudflare, and Cloudflare to origin.
+
+I used the **DNS-01** ACME challenge (via a Cloudflare API token) rather than
+HTTP-01. HTTP-01 has to reach the origin on port 80, which fights with the
+Cloudflare proxy being on; DNS-01 only needs a TXT record, so it works no matter
+how the proxy is set up. TLS is opt-in in the chart (`ingress.tls.*`): off in the
+base values, on in `values-prod.yaml`. The chart still emits a catch-all rule next
+to the host rule, so the raw Elastic IP keeps answering over plain HTTP.
+
+The cost: a Cloudflare API token now lives as a cluster secret (scoped to
+Zone:DNS:Edit), and cert-manager is one more moving part on the EC2 node.

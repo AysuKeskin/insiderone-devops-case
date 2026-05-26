@@ -8,7 +8,7 @@ style: status, context, decision, and consequences.
 
 Status: Accepted
 
-We chose Go because the service is intentionally small, HTTP-focused, and needs
+I chose Go because the service is intentionally small, HTTP-focused, and needs
 to build into a simple static binary. Go's standard library is enough for the
 core endpoints, graceful shutdown, and tests, so there is no need for a web
 framework at this stage. The main tradeoff is that Go 1.25 must be available in
@@ -72,9 +72,9 @@ the service.
 
 Status: Accepted
 
-We use a small Helm chart rather than applying raw Kubernetes YAML files. Helm
+I use a small Helm chart rather than applying raw Kubernetes YAML files. Helm
 packages the Deployment, Service, Ingress, ConfigMap, Secret, and HPA in one
-repeatable unit and gives us `values-dev.yaml` and `values-prod.yaml` for
+repeatable unit and gives me `values-dev.yaml` and `values-prod.yaml` for
 environment differences. The tradeoff is template syntax, but it buys clean
 upgrades, rollbacks, and a familiar production deployment workflow.
 
