@@ -192,6 +192,25 @@ Evidence captured from a local run:
 - [Scraped metrics](docs/evidence/observability/prometheus-metrics.png) — `http_requests_total` by route
 - [Alert rules loaded](docs/evidence/observability/alert-rules.png) — `HighErrorRate` + `AppDown`
 
+## Bonuses
+
+Beyond the core slice: three "going further" items (#2, #4, #6) plus the Day 2 HPA bonus — each with a note on how and what it taught:
+
+- **Supply chain** — CI signs every image with cosign (keyless OIDC), produces a Syft SPDX SBOM, and binds it to the image with `cosign attest`. *Learned:* keyless signing needs `id-token: write`, and an SBOM is far more useful as an attestation (verifiable against the digest) than a loose file. Verify commands in [SECURITY.md](SECURITY.md).
+- **Custom domain + TLS** — HTTPS via cert-manager + Let's Encrypt with a DNS-01 (Cloudflare) challenge; the ingress terminates TLS behind Cloudflare Full (strict). *Learned:* DNS-01 is far more robust than HTTP-01 behind a Cloudflare proxy, and a token with a trailing newline surfaces as Cloudflare error 6111 (header format), not an auth error. Setup in [RUNBOOK.md](RUNBOOK.md) → "TLS / HTTPS".
+- **Chaos test** — killed a pod and watched the Deployment self-heal (see [Chaos test](#chaos-test) above). *Learned:* the controller reacts to the desired-vs-actual delta immediately, so drain and new-pod startup overlap cleanly.
+- **HPA (Day 2 bonus)** — CPU-based autoscaling, min 3 / max 10 at 70%. *Learned:* HPA needs metrics-server + resource requests to compute utilization, and `minReplicas` is a hard floor independent of CPU.
+
+## AI usage
+
+I used AI assistants (Claude Code and ChatGPT/Codex) as pair programmers for
+scaffolding, command sequencing, debugging, and documentation review — drafting
+Makefile/Helm/TLS steps, explaining CI/CD and cert-manager errors, and tightening
+the README, RUNBOOK, and ADR wording. I owned the architecture decisions and
+secret handling, made the final call on every edit, and verified the result
+myself with local tests plus `helm`, `kubectl`, AWS SSM, GitHub Actions, and live
+endpoint checks.
+
 ## Layout
 
 | Path | Contents |
