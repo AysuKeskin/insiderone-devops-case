@@ -1,0 +1,25 @@
+{{- if .Values.metrics.prometheusRule.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "insiderone-devops-case.fullname" . }}
+  labels:
+    {{- include "insiderone-devops-case.labels" . | nindent 4 }}
+    # Same release-label requirement as the ServiceMonitor: Prometheus's
+    # ruleSelector picks up PrometheusRules by this label.
+    release: {{ .Values.metrics.prometheusRule.releaseLabel }}
+spec:
+  groups:
+    - name: insiderone-devops-case
+      rules:
+        - alert: HighErrorRate
+          expr: |
+            sum(rate(http_requests_total{status=~"5.."}[5m]))
+              / sum(rate(http_requests_total[5m])) > 0.05
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "5xx error rate > 5%"
+            description: "More than 5% of requests returned 5xx over the last 5m."
+{{- end }}

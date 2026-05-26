@@ -86,3 +86,17 @@ containerSecurityContext:
   readOnlyRootFilesystem: true
   capabilities:
     drop: ["ALL"]
+
+# Prometheus Operator integration. Both default OFF so a plain `helm install`
+# (and `helm lint` in CI) never needs the Operator CRDs; flip on with --set on
+# a cluster that runs kube-prometheus-stack. releaseLabel must match that
+# stack's Helm release name or Prometheus ignores these objects.
+metrics:
+  serviceMonitor:
+    enabled: false
+    releaseLabel: monitoring
+    interval: 15s
+    path: /metrics
+  prometheusRule:
+    enabled: false
+    releaseLabel: monitoring
