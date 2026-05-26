@@ -22,4 +22,13 @@ spec:
           annotations:
             summary: "5xx error rate > 5%"
             description: "More than 5% of requests returned 5xx over the last 5m."
+        - alert: AppDown
+          expr: |
+            up{service="{{ include "insiderone-devops-case.fullname" . }}"} == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "app target down"
+            description: "Prometheus could not scrape the app for 2m (no Ready replica). Trigger demo: kubectl scale deploy/{{ include "insiderone-devops-case.fullname" . }} --replicas=0."
 {{- end }}
