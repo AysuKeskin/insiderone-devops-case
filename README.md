@@ -3,7 +3,15 @@
 A tiny Go HTTP service for the Insider One DevOps 2026 case study.
 End-to-end slice: app → container → Helm/minikube → CI/CD → observability → public URL.
 
-**Track:** A — minikube on AWS EC2 (Elastic IP exposed).
+**Track:** A — minikube on AWS EC2 (Elastic IP exposed). Live demo: `curl http://<EIP>/ping` → `pong` ([evidence](docs/evidence/public-url-ping.png)).
+
+Security posture and reporting: see [SECURITY.md](SECURITY.md). Design decisions: [`docs/adr/`](docs/adr/).
+
+## Architecture
+
+![Architecture](docs/architecture.png)
+
+Client → Elastic IP → EC2 (minikube: ingress-nginx → Service → pods). CI/CD: GitHub Actions builds, scans (Trivy), signs (cosign), pushes to GHCR, then deploys to EC2 over SSM via OIDC. Observability (local): the app's `/metrics` → Prometheus → Grafana + Alertmanager. Vector version: [`docs/architecture.svg`](docs/architecture.svg).
 
 ## Endpoints
 
@@ -104,7 +112,7 @@ Deployments use an explicit `RollingUpdate` with `maxSurge: 1, maxUnavailable: 0
 
 ### Rollout & rollback exercise
 
-The `/version` endpoint makes rollouts observable end-to-end. With `helm upgrade --set image.tag=<new>` the response flips to the new tag; `helm rollback` immediately flips it back. Evidence captured to `docs/evidence/version-before-bump.txt`, `version-after-bump.txt`, `version-after-rollback.txt`, plus `helm-history-final.txt` showing the full revision chain (install → upgrade → upgrade → upgrade → rollback → upgrade → rollback).
+The `/version` endpoint makes rollouts observable end-to-end. With `helm upgrade --set image.tag=<new>` the response flips to the new tag; `helm rollback` immediately flips it back. Evidence captured to `docs/evidence/version-before-bump.txt`, `version-after-bump.txt`, `version-after-rollback.txt`, plus `helm-history-final.txt` showing the full revision chain (install → upgrade → upgrade → upgrade → rollback → upgrade → rollback). Live cluster state — `get pods` / `helm list` / `helm history` / `rollout status` — in [`docs/evidence/kubectl-helm-status.png`](docs/evidence/kubectl-helm-status.png).
 
 ## Chaos test
 
@@ -159,21 +167,29 @@ make load-gen                            # generate traffic so the panels move
 
 Grafana admin password: `kubectl -n monitoring get secret monitoring-grafana -o jsonpath='{.data.admin-password}' | base64 -d`.
 
-The dashboard (`docs/dashboards/insiderone-http.json`) shows RPS, p50/p95 latency, 5xx error rate, and pod restarts. The `HighErrorRate` alert (5xx ratio > 5% for 5m) ships as a `PrometheusRule`. The `serviceMonitor`/`prometheusRule` toggles default to **off** so a normal install never needs the Prometheus Operator CRDs. Evidence in `docs/evidence/grafana-dashboard.png`, `prometheus-targets.png`, `alert-rule.png`.
+The dashboard (`docs/dashboards/insiderone-http.json`) shows RPS, p50/p95 latency, 5xx error rate, and pod restarts. Two alerts ship as a `PrometheusRule`: `HighErrorRate` (5xx ratio > 5% for 5m) and `AppDown` (target unscrapable for 2m). The `serviceMonitor`/`prometheusRule` toggles default to **off** so a normal install never needs the Prometheus Operator CRDs.
+
+![Grafana dashboard](docs/evidence/grafana-dashboard.png)
+
+Evidence captured from a local run:
+- [Grafana dashboard](docs/evidence/grafana-dashboard.png) — RPS, latency, pod restarts
+- [Prometheus target UP](docs/evidence/prometheus-targets.png) — the app's ServiceMonitor endpoint scraping
+- [Scraped metrics](docs/evidence/prometheus-metrics.png) — `http_requests_total` by route
+- [Alert rules loaded](docs/evidence/alert-rules.png) — `HighErrorRate` + `AppDown`
 
 ## Layout
 
-```
-cmd/server/        entrypoint, lifecycle wiring
-internal/handlers/ /ping /healthz /readyz /version
-internal/middleware/ request-id, access log, metrics
-internal/metrics/  prometheus collectors (http_requests_total, duration histogram)
-internal/version/  ldflags-populated build info
-helm/insiderone-devops-case/
-                   Helm chart: Deployment, Service, Ingress, ConfigMap, Secret,
-                   HPA, ServiceMonitor, PrometheusRule, values-dev/prod.yaml
-docs/evidence/     command output evidence: helm history, rollout, rollback, chaos, monitoring
-docs/dashboards/   Grafana dashboard JSON
-infra/terraform/   EC2, EIP, SG, IAM OIDC role (Track A)
-.github/workflows/ ci-cd.yml: build → scan → sign → push → SSM deploy
-```
+| Path | Contents |
+|---|---|
+| `cmd/server/` | entrypoint + lifecycle (graceful shutdown) |
+| `internal/handlers/` | `/ping` `/healthz` `/readyz` `/version` |
+| `internal/middleware/` | request-id, access log, metrics |
+| `internal/metrics/` | Prometheus collectors (`http_requests_total`, duration histogram) |
+| `internal/version/` | ldflags-populated build info |
+| `helm/insiderone-devops-case/` | chart: Deployment, Service, Ingress, ConfigMap, Secret, HPA, ServiceMonitor, PrometheusRule, `values-dev/prod.yaml` |
+| `infra/terraform/` | EC2, EIP, SG, IAM OIDC role (Track A) |
+| `.github/workflows/` | `ci-cd.yml`: build → scan → sign → push → SSM deploy |
+| `docs/adr/` | architecture decision records (Days 1–4) |
+| `docs/dashboards/` | Grafana dashboard JSON |
+| `docs/evidence/` | command-output + screenshot evidence |
+| `docs/architecture.*` | architecture diagram (draw.io — PNG embed + SVG vector/source) |
