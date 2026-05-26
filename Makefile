@@ -9,7 +9,9 @@ TAG        ?= $(COMMIT)
 CHART      := helm/insiderone-devops-case
 RELEASE    := insiderone-devops-case
 
-.PHONY: help run test docker-test build docker-build docker-run scan compose-up compose-down clean lint helm-lint helm-template deploy-dev deploy-prod rollback rollout-status rollout-dev rollout-prod helm-history helm-uninstall minikube-load
+MONITORING_NS := monitoring
+
+.PHONY: help run test docker-test build docker-build docker-run scan compose-up compose-down clean lint helm-lint helm-template deploy-dev deploy-prod rollback rollout-status rollout-dev rollout-prod helm-history helm-uninstall minikube-load monitoring-install monitoring-grafana monitoring-prometheus load-gen
 
 help: ## list targets
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_-]+:.*##/ {printf "  %-16s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -89,3 +91,18 @@ helm-history: ## show release history
 
 helm-uninstall: ## remove the release
 	helm uninstall $(RELEASE)
+
+monitoring-install: ## install kube-prometheus-stack into the monitoring namespace
+	helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+	helm repo update
+	helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
+	  -n $(MONITORING_NS) --create-namespace
+
+monitoring-grafana: ## port-forward Grafana to localhost:3000 (user admin; see README for pw)
+	kubectl -n $(MONITORING_NS) port-forward svc/monitoring-grafana 3000:80
+
+monitoring-prometheus: ## port-forward Prometheus to localhost:9090
+	kubectl -n $(MONITORING_NS) port-forward svc/monitoring-kube-prometheus-prometheus 9090:9090
+
+load-gen: ## hammer /ping to populate RPS/latency panels (Ctrl-C to stop)
+	while true; do curl -s localhost:8080/ping >/dev/null; done

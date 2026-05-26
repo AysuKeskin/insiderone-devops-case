@@ -140,17 +140,40 @@ terraform destroy           # full teardown when the demo window is closed
 
 The stack is intentionally narrow: no SSH (port 22 is closed at the SG), no long-lived AWS keys (GitHub Actions assumes the `gha_deploy` role via OIDC), and no GHCR secret on the host (the image is published as a public package, so minikube pulls anonymously). See `docs/adr/day-3-decisions.md` for the deploy-via-SSM and `t3.medium` tradeoffs.
 
+## Observability
+
+The app exposes Prometheus metrics at `/metrics` (`http_requests_total`, `http_request_duration_seconds`, plus Go/process collectors). Monitoring runs on **local minikube** (the EC2 box is sized for the app, not a full stack — see `docs/adr/day-4-decisions.md`).
+
+```sh
+make monitoring-install                  # kube-prometheus-stack into the `monitoring` ns
+# deploy the app with the Prometheus Operator objects switched on:
+helm upgrade --install insiderone-devops-case helm/insiderone-devops-case \
+  -f helm/insiderone-devops-case/values-dev.yaml \
+  --set image.pullPolicy=Never \
+  --set metrics.serviceMonitor.enabled=true \
+  --set metrics.prometheusRule.enabled=true
+make monitoring-prometheus               # localhost:9090 → Status/Targets shows our endpoint UP
+make monitoring-grafana                  # localhost:3000 → import docs/dashboards/insiderone-http.json
+make load-gen                            # generate traffic so the panels move
+```
+
+Grafana admin password: `kubectl -n monitoring get secret monitoring-grafana -o jsonpath='{.data.admin-password}' | base64 -d`.
+
+The dashboard (`docs/dashboards/insiderone-http.json`) shows RPS, p50/p95 latency, 5xx error rate, and pod restarts. The `HighErrorRate` alert (5xx ratio > 5% for 5m) ships as a `PrometheusRule`. The `serviceMonitor`/`prometheusRule` toggles default to **off** so a normal install never needs the Prometheus Operator CRDs. Evidence in `docs/evidence/grafana-dashboard.png`, `prometheus-targets.png`, `alert-rule.png`.
+
 ## Layout
 
 ```
 cmd/server/        entrypoint, lifecycle wiring
 internal/handlers/ /ping /healthz /readyz /version
-internal/middleware/ request-id, access log
+internal/middleware/ request-id, access log, metrics
+internal/metrics/  prometheus collectors (http_requests_total, duration histogram)
 internal/version/  ldflags-populated build info
 helm/insiderone-devops-case/
-                   Helm chart: Deployment, Service, Ingress, ConfigMap,
-                   Secret, HPA, values-dev.yaml, values-prod.yaml
-docs/evidence/     command output evidence: helm history, rollout, rollback, chaos
+                   Helm chart: Deployment, Service, Ingress, ConfigMap, Secret,
+                   HPA, ServiceMonitor, PrometheusRule, values-dev/prod.yaml
+docs/evidence/     command output evidence: helm history, rollout, rollback, chaos, monitoring
+docs/dashboards/   Grafana dashboard JSON
 infra/terraform/   EC2, EIP, SG, IAM OIDC role (Track A)
 .github/workflows/ ci-cd.yml: build → scan → sign → push → SSM deploy
 ```

@@ -1,0 +1,93 @@
+{
+  "title": "InsiderOne HTTP service",
+  "uid": "insiderone-http",
+  "tags": ["insiderone-devops-case"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "refresh": "10s",
+  "time": { "from": "now-15m", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "label": "Prometheus",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "hide": 0
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Request rate (RPS)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "sum(rate(http_requests_total[1m]))",
+          "legendFormat": "rps"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Latency p50 / p95",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Error rate (5xx ratio)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "sum(rate(http_requests_total{status=~\"5..\"}[5m])) / clamp_min(sum(rate(http_requests_total[5m])), 1)",
+          "legendFormat": "5xx ratio"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Pod restarts",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "sum(kube_pod_container_status_restarts_total{pod=~\"insiderone-devops-case.*\"})",
+          "legendFormat": "restarts"
+        }
+      ]
+    }
+  ]
+}
