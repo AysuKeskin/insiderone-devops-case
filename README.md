@@ -3,7 +3,7 @@
 A tiny Go HTTP service for the Insider One DevOps 2026 case study.
 End-to-end slice: app → container → Helm/minikube → CI/CD → observability → public URL.
 
-**Track:** A — minikube on AWS EC2, exposed over HTTPS on a custom domain. Live demo: `curl https://insiderone-devopscase.aysu-keskin.uk/ping` → `pong` ([evidence](docs/evidence/public-url/public-url-ping.png)).
+**Track:** A — minikube on AWS EC2, exposed over HTTPS on a custom domain. Live demo: `curl https://devops-case.aysu-keskin.uk/ping` → `pong` ([evidence](docs/evidence/public-url/public-url-ping.png)).
 
 Security posture and reporting: see [SECURITY.md](SECURITY.md). Design decisions: [`docs/adr/`](docs/adr/).
 
@@ -102,7 +102,7 @@ The two values files map to where each is actually run:
 | Runs on | local minikube (laptop) | EC2 minikube (cloud) |
 | Driven by | `make rollout-dev` | the CD pipeline |
 | Replicas / logs | 1 / debug | 3 + HPA / info |
-| Ingress | `tiny.dev.local` | `insiderone-devopscase.aysu-keskin.uk` (HTTPS) + raw-IP catch-all |
+| Ingress | `tiny.dev.local` | `devops-case.aysu-keskin.uk` (HTTPS) + raw-IP catch-all |
 
 `dev` is the local developer loop; `prod` is the real cloud target. We intentionally do **not** run a second `dev` release on the same EC2 host — one node gives no real isolation, so it would be a duplicate rather than a distinct environment, and prod's `helm --atomic` already guards against a bad image. See `docs/adr/day-3-decisions.md` (ADR 009).
 

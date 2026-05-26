@@ -11,7 +11,7 @@ minikube on EC2 (app), with monitoring on local minikube (Prometheus + Grafana).
   One release: `insiderone-devops-case` (default namespace).
 - **Access**: no SSH. Get a shell with
   `aws ssm start-session --target <instance-id> --region eu-north-1`.
-- **Public URL**: `https://insiderone-devopscase.aysu-keskin.uk/` (Cloudflare → Elastic IP → ingress; the raw IP also answers over HTTP via a catch-all rule).
+- **Public URL**: `https://devops-case.aysu-keskin.uk/` (Cloudflare → Elastic IP → ingress; the raw IP also answers over HTTP via a catch-all rule).
 
 ## Deploy
 
@@ -53,7 +53,7 @@ sudo runuser -l ec2-user -c "helm rollback insiderone-devops-case && kubectl rol
 exit                                                                       # leave the SSM session
 
 # 4) confirm from anywhere:
-curl -s https://insiderone-devopscase.aysu-keskin.uk/version               # the tag reverted
+curl -s https://devops-case.aysu-keskin.uk/version               # the tag reverted
 ```
 
 To target a specific revision instead of the previous one:
@@ -62,8 +62,8 @@ To target a specific revision instead of the previous one:
 ## Verify health
 
 ```sh
-curl -s https://insiderone-devopscase.aysu-keskin.uk/ping        # → pong
-curl -s https://insiderone-devopscase.aysu-keskin.uk/version     # → build sha + semver
+curl -s https://devops-case.aysu-keskin.uk/ping        # → pong
+curl -s https://devops-case.aysu-keskin.uk/version     # → build sha + semver
 kubectl get pods -l app.kubernetes.io/name=insiderone-devops-case
 kubectl get hpa,ingress,svc
 ```
@@ -147,7 +147,7 @@ Two alert rules ship as a `PrometheusRule`:
 chart also keeps a catch-all rule so the raw IP still answers over HTTP). The
 cluster needs this one-time setup before a prod deploy can serve HTTPS:
 
-1. **Cloudflare** — add a DNS `A` record `insiderone-devopscase.aysu-keskin.uk` → the
+1. **Cloudflare** — add a DNS `A` record `devops-case.aysu-keskin.uk` → the
    Elastic IP. Create an API token scoped to `Zone:DNS:Edit` for the zone.
 2. **cert-manager** — `make tls-install`.
 3. **Cloudflare token secret** (cert-manager namespace):
@@ -167,7 +167,7 @@ cluster needs this one-time setup before a prod deploy can serve HTTPS:
 7. **Wait for the cert** — `kubectl get certificate`; `kubectl describe certificate
    insiderone-devops-case-tls` to debug a `False` Ready.
 8. **Cloudflare** — proxy ON (orange cloud), SSL/TLS mode **Full (strict)**.
-9. **Test** — `curl -I https://insiderone-devopscase.aysu-keskin.uk/ping` → `200`.
+9. **Test** — `curl -I https://devops-case.aysu-keskin.uk/ping` → `200`.
 
 If issuance is stuck: check `kubectl get challenges,orders -A`, the
 `cloudflare-api-token` secret, and that the issuer email is real.

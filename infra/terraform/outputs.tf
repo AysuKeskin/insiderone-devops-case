@@ -20,7 +20,7 @@ output "public_ip" {
 
 output "public_url" {
   description = "Public URL (Cloudflare → Elastic IP → ingress, TLS via cert-manager)."
-  value       = "https://insiderone-devopscase.aysu-keskin.uk"
+  value       = "https://devops-case.aysu-keskin.uk"
 }
 
 output "public_ip_url" {

@@ -21,7 +21,7 @@ ingress:
   # Elastic IP keeps answering over HTTP. TLS cert is issued by cert-manager
   # (letsencrypt-dns ClusterIssuer) — see RUNBOOK "TLS / HTTPS" for the one-time
   # cluster setup (cert-manager + cloudflare-api-token secret + issuer).
-  host: insiderone-devopscase.aysu-keskin.uk
+  host: devops-case.aysu-keskin.uk
   tls:
     enabled: true
     secretName: insiderone-devops-case-tls
