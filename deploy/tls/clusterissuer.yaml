@@ -1,0 +1,26 @@
+# Let's Encrypt production issuer using a DNS-01 challenge solved through
+# Cloudflare. DNS-01 works regardless of the Cloudflare proxy (orange cloud)
+# state, so it pairs cleanly with SSL/TLS mode "Full (strict)".
+#
+# Before applying, create the API-token secret (do NOT commit the token):
+#   kubectl create secret generic cloudflare-api-token \
+#     --namespace cert-manager \
+#     --from-literal=api-token='<CLOUDFLARE_API_TOKEN>'
+# The token needs Zone:DNS:Edit on the zone (aysu-keskin.uk).
+# Replace the email below with a real contact address before applying.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-dns
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: aysukeskin00@gmail.com
+    privateKeySecretRef:
+      name: letsencrypt-dns-account-key
+    solvers:
+      - dns01:
+          cloudflare:
+            apiTokenSecretRef:
+              name: cloudflare-api-token
+              key: api-token

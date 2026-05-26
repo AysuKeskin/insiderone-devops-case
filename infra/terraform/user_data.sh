@@ -107,4 +107,33 @@ EOF
 systemctl daemon-reload
 systemctl enable --now minikube-http-forward.service
 
+# --- expose host port 443 through the minikube ingress (for TLS) -------------
+# Mirrors the :80 proxy; the ingress terminates TLS at :443 once cert-manager
+# has issued a certificate. Harmless when TLS is not configured yet.
+cat > /usr/local/sbin/minikube-https-forward.sh <<'EOF'
+#!/bin/bash
+set -euo pipefail
+MINIKUBE_IP="$(runuser -l ec2-user -c 'minikube ip')"
+exec /usr/bin/socat TCP-LISTEN:443,fork,reuseaddr TCP:"$MINIKUBE_IP":443
+EOF
+chmod +x /usr/local/sbin/minikube-https-forward.sh
+
+cat > /etc/systemd/system/minikube-https-forward.service <<'EOF'
+[Unit]
+Description=Proxy host port 443 to minikube ingress
+After=minikube.service
+Requires=minikube.service
+
+[Service]
+Restart=always
+RestartSec=3
+ExecStart=/usr/local/sbin/minikube-https-forward.sh
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable --now minikube-https-forward.service
+
 echo "bootstrap complete: $(date -u +%Y-%m-%dT%H:%M:%SZ)" > /var/log/bootstrap-done

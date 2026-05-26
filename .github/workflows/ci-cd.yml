@@ -194,6 +194,12 @@ jobs:
           upload-artifact: false
           output-file: sbom.spdx.json
 
+      - name: cosign attest SBOM (bind it to the image)
+        run: |
+          cosign attest --yes \
+            --predicate sbom.spdx.json --type spdxjson \
+            "${{ env.IMAGE }}@${{ needs.build-scan-push.outputs.digest }}"
+
       - name: upload SBOM artifact
         uses: actions/upload-artifact@v4
         with:

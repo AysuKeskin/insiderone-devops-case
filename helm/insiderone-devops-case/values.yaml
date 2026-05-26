@@ -30,6 +30,12 @@ ingress:
   enabled: true
   className: nginx
   host: tiny.local
+  # TLS is opt-in. When enabled (and host is set), the chart adds a tls block
+  # and a cert-manager annotation so the cert is provisioned automatically.
+  tls:
+    enabled: false
+    secretName: ""
+    clusterIssuer: ""
 
 # App config injected via ConfigMap (non-secret env vars only).
 config:

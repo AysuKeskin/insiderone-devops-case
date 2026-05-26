@@ -5,11 +5,22 @@ metadata:
   name: {{ include "insiderone-devops-case.fullname" . }}
   labels:
     {{- include "insiderone-devops-case.labels" . | nindent 4 }}
+  {{- if and .Values.ingress.tls.enabled .Values.ingress.tls.clusterIssuer }}
+  annotations:
+    # cert-manager watches this and provisions the TLS secret via the issuer.
+    cert-manager.io/cluster-issuer: {{ .Values.ingress.tls.clusterIssuer | quote }}
+  {{- end }}
 spec:
   ingressClassName: {{ .Values.ingress.className }}
+  {{- if and .Values.ingress.tls.enabled .Values.ingress.host }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.host | quote }}
+      secretName: {{ .Values.ingress.tls.secretName | quote }}
+  {{- end }}
   # Empty ingress.host emits a catch-all rule so the service answers on the raw
   # public IP (used on EC2, where there is no DNS name). A non-empty host
-  # restricts routing to that hostname.
+  # restricts routing to that hostname (required when TLS is enabled).
   rules:
     - {{- with .Values.ingress.host }}
       host: {{ . | quote }}
