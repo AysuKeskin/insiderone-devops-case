@@ -11,7 +11,7 @@ RELEASE    := insiderone-devops-case
 
 MONITORING_NS := monitoring
 
-.PHONY: help run test docker-test build docker-build docker-run scan compose-up compose-down clean lint helm-lint helm-template deploy-dev deploy-prod rollback rollout-status rollout-dev rollout-prod helm-history helm-uninstall minikube-load monitoring-install monitoring-grafana monitoring-prometheus load-gen
+.PHONY: help run test docker-test build docker-build docker-run scan compose-up compose-down clean lint helm-lint helm-template deploy-dev deploy-prod rollback rollout-status rollout-dev rollout-prod helm-history helm-uninstall minikube-load monitoring-install monitoring-grafana monitoring-prometheus load-gen tls-install
 
 help: ## list targets
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_-]+:.*##/ {printf "  %-16s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -106,3 +106,8 @@ monitoring-prometheus: ## port-forward Prometheus to localhost:9090
 
 load-gen: ## hammer /ping to populate RPS/latency panels (Ctrl-C to stop)
 	while true; do curl -s localhost:8080/ping >/dev/null; done
+
+tls-install: ## install cert-manager (for ingress TLS via Let's Encrypt DNS-01)
+	helm upgrade --install cert-manager oci://quay.io/jetstack/charts/cert-manager \
+	  --namespace cert-manager --create-namespace \
+	  --version v1.20.2 --set crds.enabled=true

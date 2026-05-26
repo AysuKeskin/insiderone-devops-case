@@ -93,6 +93,37 @@ Two alert rules ship as a `PrometheusRule`:
 2. Check the Prometheus target (Status → Targets) and the pod's events/logs.
 3. If a deploy broke it, roll back; otherwise `kubectl rollout restart` the deployment.
 
+## TLS / HTTPS (custom domain via cert-manager + Cloudflare)
+
+`values-prod.yaml` carries the domain + TLS (cert-manager issues the cert; the
+chart also keeps a catch-all rule so the raw IP still answers over HTTP). The
+cluster needs this one-time setup before a prod deploy can serve HTTPS:
+
+1. **Cloudflare** — add a DNS `A` record `insiderone-devopscase.aysu-keskin.uk` → the
+   Elastic IP. Create an API token scoped to `Zone:DNS:Edit` for the zone.
+2. **cert-manager** — `make tls-install`.
+3. **Cloudflare token secret** (cert-manager namespace):
+   ```sh
+   kubectl create secret generic cloudflare-api-token -n cert-manager \
+     --from-literal=api-token='<TOKEN>'
+   ```
+4. **Issuer** — set the email in `deploy/tls/clusterissuer.yaml`, then
+   `kubectl apply -f deploy/tls/clusterissuer.yaml`.
+5. **443 forward** — fresh EC2 instances get it from `user_data` (socat 443→minikube);
+   on an existing box, add `minikube-https-forward.service` (mirror of the :80 one).
+6. **Deploy** (CI/CD does this automatically with `values-prod.yaml`):
+   ```sh
+   helm upgrade --install insiderone-devops-case helm/insiderone-devops-case \
+     -f helm/insiderone-devops-case/values-prod.yaml
+   ```
+7. **Wait for the cert** — `kubectl get certificate`; `kubectl describe certificate
+   insiderone-devops-case-tls` to debug a `False` Ready.
+8. **Cloudflare** — proxy ON (orange cloud), SSL/TLS mode **Full (strict)**.
+9. **Test** — `curl -I https://insiderone-devopscase.aysu-keskin.uk/ping` → `200`.
+
+If issuance is stuck: check `kubectl get challenges,orders -A`, the
+`cloudflare-api-token` secret, and that the issuer email is real.
+
 ## Common issues
 
 | Symptom | Likely cause | Action |

@@ -18,14 +18,23 @@ spec:
         - {{ .Values.ingress.host | quote }}
       secretName: {{ .Values.ingress.tls.secretName | quote }}
   {{- end }}
-  # Empty ingress.host emits a catch-all rule so the service answers on the raw
-  # public IP (used on EC2, where there is no DNS name). A non-empty host
-  # restricts routing to that hostname (required when TLS is enabled).
+  # A non-empty host gets its own rule (required for TLS/SNI). A catch-all rule
+  # is always emitted too, so the service still answers on the raw public IP
+  # (no Host header) even when a domain is set.
   rules:
-    - {{- with .Values.ingress.host }}
-      host: {{ . | quote }}
-      {{- end }}
+    {{- if .Values.ingress.host }}
+    - host: {{ .Values.ingress.host | quote }}
       http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "insiderone-devops-case.fullname" . }}
+                port:
+                  number: {{ .Values.service.port }}
+    {{- end }}
+    - http:
         paths:
           - path: /
             pathType: Prefix

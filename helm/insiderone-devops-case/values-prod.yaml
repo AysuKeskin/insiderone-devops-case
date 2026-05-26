@@ -17,9 +17,15 @@ resources:
 ingress:
   enabled: true
   className: nginx
-  # Empty host = catch-all rule, so the app answers on the raw EC2 Elastic IP
-  # (no DNS name in this demo). Set a real hostname here once a domain is wired.
-  host: ""
+  # Real domain + HTTPS. A catch-all rule is still emitted (template) so the raw
+  # Elastic IP keeps answering over HTTP. TLS cert is issued by cert-manager
+  # (letsencrypt-dns ClusterIssuer) — see RUNBOOK "TLS / HTTPS" for the one-time
+  # cluster setup (cert-manager + cloudflare-api-token secret + issuer).
+  host: insiderone-devopscase.aysu-keskin.uk
+  tls:
+    enabled: true
+    secretName: insiderone-devops-case-tls
+    clusterIssuer: letsencrypt-dns
 
 hpa:
   enabled: true

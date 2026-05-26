@@ -45,8 +45,8 @@ Cloudflare→origin. We chose the **DNS-01** ACME challenge (Cloudflare API toke
 over HTTP-01 because DNS-01 works regardless of Cloudflare's proxy state — an
 HTTP-01 challenge has to reach the origin on port 80, which is awkward when the
 orange-cloud proxy and Full-strict are both on. TLS is **opt-in** in the chart
-(`ingress.tls.*`, off by default) and applied via the `values-tls.yaml` overlay,
-so the default raw-IP deploy keeps working and `helm lint`/CI never need the
-cert-manager CRDs. Tradeoff: a Cloudflare API token now lives as a cluster
+(`ingress.tls.*`, off by default in the base values, on in `values-prod.yaml`).
+The chart still emits a catch-all rule alongside the host rule, so the raw IP
+keeps answering over HTTP. Tradeoff: a Cloudflare API token now lives as a cluster
 secret (scoped to Zone:DNS:Edit), and cert-manager is one more component on the
 EC2 node.
