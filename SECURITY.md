@@ -55,6 +55,9 @@ Every image that reaches the registry has passed, in CI (`.github/workflows/ci-c
   via AWS SSM Session Manager (audited through CloudTrail).
 - **Minimal network surface** — the security group allows only `80`/`443` inbound;
   IMDSv2 is required on the instance.
+- **TLS in transit** — the public endpoint is served over HTTPS: the ingress
+  terminates a Let's Encrypt certificate issued by cert-manager (DNS-01), and
+  Cloudflare fronts it in Full (strict) mode.
 - **No secrets in git** — Kubernetes Secrets are injected at deploy time; the chart
   ships an empty Secret contract, never real values.
 

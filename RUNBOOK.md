@@ -11,7 +11,7 @@ minikube on EC2 (app), with monitoring on local minikube (Prometheus + Grafana).
   One release: `insiderone-devops-case` (default namespace).
 - **Access**: no SSH. Get a shell with
   `aws ssm start-session --target <instance-id> --region eu-north-1`.
-- **Public URL**: `http://<elastic-ip>/` (ingress catch-all → service → pods).
+- **Public URL**: `https://insiderone-devopscase.aysu-keskin.uk/` (Cloudflare → Elastic IP → ingress; the raw IP also answers over HTTP via a catch-all rule).
 
 ## Deploy
 
@@ -30,18 +30,40 @@ kubectl rollout status deployment/insiderone-devops-case --timeout=3m
 
 ## Rollback
 
+**Local minikube** — one command (rolls back to the previous revision and waits):
+
 ```sh
-helm history insiderone-devops-case          # find the last good revision
-helm rollback insiderone-devops-case <REV>   # or omit <REV> for the previous one
-kubectl rollout status deployment/insiderone-devops-case --timeout=2m
-curl -s http://<elastic-ip>/version           # confirm the tag reverted
+make rollback
+curl -s localhost:8080/version   # confirm the tag reverted
 ```
+
+**Prod (EC2)** — there is no direct cluster access from a laptop, so run it on the
+box via SSM as `ec2-user`:
+
+```sh
+# 1) on your machine — get the instance id (or read it from the AWS console):
+terraform -chdir=infra/terraform output -raw ec2_instance_id
+
+# 2) open a shell on the box:
+aws ssm start-session --target <instance-id> --region eu-north-1
+
+# 3) inside the session (runs as ec2-user, the cluster owner):
+sudo runuser -l ec2-user -c "helm history insiderone-devops-case"          # find the last good revision
+sudo runuser -l ec2-user -c "helm rollback insiderone-devops-case && kubectl rollout status deployment/insiderone-devops-case --timeout=2m"
+exit                                                                       # leave the SSM session
+
+# 4) confirm from anywhere:
+curl -s https://insiderone-devopscase.aysu-keskin.uk/version               # the tag reverted
+```
+
+To target a specific revision instead of the previous one:
+`helm rollback insiderone-devops-case <REV>`.
 
 ## Verify health
 
 ```sh
-curl -s http://<elastic-ip>/ping        # → pong
-curl -s http://<elastic-ip>/version     # → build sha + semver
+curl -s https://insiderone-devopscase.aysu-keskin.uk/ping        # → pong
+curl -s https://insiderone-devopscase.aysu-keskin.uk/version     # → build sha + semver
 kubectl get pods -l app.kubernetes.io/name=insiderone-devops-case
 kubectl get hpa,ingress,svc
 ```
@@ -59,6 +81,32 @@ kubectl rollout status  deployment/insiderone-devops-case --timeout=2m
 Every request line carries `request_id, method, path, status, duration_ms`; grep
 a `request_id` to trace one request. `/healthz`, `/readyz`, `/metrics` are logged
 at DEBUG to avoid probe noise (raise `LOG_LEVEL=debug` to see them).
+
+## Secret rotation
+
+**App secret** (Helm-managed `insiderone-devops-case-secret`) — update the value and
+re-deploy; the chart's `checksum/secret` annotation rolls the pods automatically so
+the new value takes effect:
+
+```sh
+helm upgrade --install insiderone-devops-case helm/insiderone-devops-case \
+  -f helm/insiderone-devops-case/values-prod.yaml \
+  --set-string secret.stringData.<KEY>=<NEW_VALUE>
+# (or update it from your secret manager, then) kubectl rollout restart deploy/insiderone-devops-case
+```
+
+**Cloudflare API token** (`cloudflare-api-token` in the `cert-manager` namespace,
+used for the DNS-01 challenge) — revoke the old token in Cloudflare, create a new one
+(scopes: Zone:DNS:Edit + Zone:Read), then replace the secret:
+
+```sh
+kubectl create secret generic cloudflare-api-token -n cert-manager \
+  --from-literal=api-token=<NEW_TOKEN> --dry-run=client -o yaml | kubectl apply -f -
+```
+cert-manager picks it up on the next renewal; no pod restart needed.
+
+**AWS / GHCR** — nothing to rotate: CI authenticates to AWS via short-lived GitHub
+OIDC tokens (no stored access keys) and to GHCR via the ephemeral `GITHUB_TOKEN`.
 
 ## Observability
 
@@ -129,6 +177,7 @@ If issuance is stuck: check `kubectl get challenges,orders -A`, the
 | Symptom | Likely cause | Action |
 |---|---|---|
 | `/ping` times out, pods Running | host-to-minikube HTTP proxy stale after reboot | `sudo systemctl restart minikube-http-forward` |
+| HTTPS fails but HTTP works | `:443` forward down, or cert not Ready | `sudo systemctl status minikube-https-forward`; `kubectl get certificate` |
 | Cluster gone after reboot | minikube didn't restart | `sudo systemctl status minikube`; `sudo systemctl restart minikube` |
 | Deploy job: `not authorized to perform sts:AssumeRoleWithWebIdentity` | OIDC `sub` / owner-casing mismatch | confirm `AWS_ROLE_ARN` secret + trust policy repo path casing |
 | Deploy job: SSM `Failed` | helm/kubectl ran as root, not ec2-user | command must use `runuser -l ec2-user` (see ADR 006) |

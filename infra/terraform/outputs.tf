@@ -14,11 +14,16 @@ output "ec2_instance_id" {
 }
 
 output "public_ip" {
-  description = "Elastic IP attached to the EC2 instance."
+  description = "Elastic IP attached to the EC2 instance (point the DNS A record here)."
   value       = aws_eip.app.public_ip
 }
 
 output "public_url" {
-  description = "Public URL for the demo service (ingress routes /ping to the app)."
+  description = "Public URL (Cloudflare → Elastic IP → ingress, TLS via cert-manager)."
+  value       = "https://insiderone-devopscase.aysu-keskin.uk"
+}
+
+output "public_ip_url" {
+  description = "Raw Elastic IP URL — still answers over HTTP via the catch-all rule."
   value       = "http://${aws_eip.app.public_ip}"
 }

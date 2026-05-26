@@ -83,8 +83,9 @@ rollout-dev: deploy-dev rollout-status ## deploy dev and wait for pods to be Rea
 
 rollout-prod: deploy-prod rollout-status ## deploy prod and wait for pods to be Ready
 
-rollback: ## rollback the release to the previous revision
+rollback: ## roll back to the previous revision and wait for it to be Ready
 	helm rollback $(RELEASE)
+	kubectl rollout status deployment/$(RELEASE) --timeout=2m
 
 helm-history: ## show release history
 	helm history $(RELEASE)

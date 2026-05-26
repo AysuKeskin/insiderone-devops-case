@@ -3,7 +3,7 @@
 A tiny Go HTTP service for the Insider One DevOps 2026 case study.
 End-to-end slice: app → container → Helm/minikube → CI/CD → observability → public URL.
 
-**Track:** A — minikube on AWS EC2 (Elastic IP exposed). Live demo: `curl http://<EIP>/ping` → `pong` ([evidence](docs/evidence/public-url-ping.png)).
+**Track:** A — minikube on AWS EC2, exposed over HTTPS on a custom domain. Live demo: `curl https://insiderone-devopscase.aysu-keskin.uk/ping` → `pong` ([evidence](docs/evidence/public-url/public-url-ping.png)).
 
 Security posture and reporting: see [SECURITY.md](SECURITY.md). Design decisions: [`docs/adr/`](docs/adr/).
 
@@ -11,7 +11,7 @@ Security posture and reporting: see [SECURITY.md](SECURITY.md). Design decisions
 
 ![Architecture](docs/architecture.png)
 
-Client → Elastic IP → EC2 (minikube: ingress-nginx → Service → pods). CI/CD: GitHub Actions builds, scans (Trivy), signs (cosign), pushes to GHCR, then deploys to EC2 over SSM via OIDC. Observability (local): the app's `/metrics` → Prometheus → Grafana + Alertmanager. Vector version: [`docs/architecture.svg`](docs/architecture.svg).
+Client → Cloudflare (HTTPS) → Elastic IP → EC2 (minikube: ingress-nginx → Service → pods); TLS terminates at the ingress with a Let's Encrypt cert from cert-manager. CI/CD: GitHub Actions builds, scans (Trivy), signs (cosign), pushes to GHCR, then deploys to EC2 over SSM via OIDC. Observability (local): the app's `/metrics` → Prometheus → Grafana + Alertmanager. Vector version: [`docs/architecture.svg`](docs/architecture.svg).
 
 ## Endpoints
 
@@ -55,7 +55,7 @@ curl localhost:8080/ping        # → pong
 | `make rollout-status` | wait for the current Deployment rollout (2 min cap) | kubectl |
 | `make rollout-dev` | `deploy-dev` then wait for pods to be Ready | Helm + kubectl |
 | `make rollout-prod` | `deploy-prod` then wait for pods to be Ready | Helm + kubectl |
-| `make rollback` | `helm rollback` to previous revision | Helm |
+| `make rollback` | `helm rollback` to previous revision, then wait for Ready | Helm + kubectl |
 | `make helm-history` | show release revision history | Helm |
 | `make helm-uninstall` | remove the release | Helm |
 | `make clean` | remove `bin/` | — |
@@ -83,7 +83,7 @@ make minikube-load                       # push the local image into minikube
 make rollout-dev                         # deploy dev (1 replica, debug) then wait
 make rollout-prod                        # deploy prod (3 replicas, HPA) then wait
 make helm-history
-make rollback && make rollout-status     # revert and wait for old image to come back
+make rollback                            # revert to the previous revision and wait for Ready
 ```
 
 `make deploy-dev` and `make deploy-prod` set `image.pullPolicy=Never` only for
@@ -102,7 +102,7 @@ The two values files map to where each is actually run:
 | Runs on | local minikube (laptop) | EC2 minikube (cloud) |
 | Driven by | `make rollout-dev` | the CD pipeline |
 | Replicas / logs | 1 / debug | 3 + HPA / info |
-| Ingress | `tiny.dev.local` | hostless (raw Elastic IP) |
+| Ingress | `tiny.dev.local` | `insiderone-devopscase.aysu-keskin.uk` (HTTPS) + raw-IP catch-all |
 
 `dev` is the local developer loop; `prod` is the real cloud target. We intentionally do **not** run a second `dev` release on the same EC2 host — one node gives no real isolation, so it would be a duplicate rather than a distinct environment, and prod's `helm --atomic` already guards against a bad image. See `docs/adr/day-3-decisions.md` (ADR 009).
 
@@ -112,7 +112,7 @@ Deployments use an explicit `RollingUpdate` with `maxSurge: 1, maxUnavailable: 0
 
 ### Rollout & rollback exercise
 
-The `/version` endpoint makes rollouts observable end-to-end. With `helm upgrade --set image.tag=<new>` the response flips to the new tag; `helm rollback` immediately flips it back. Evidence captured to `docs/evidence/version-before-bump.txt`, `version-after-bump.txt`, `version-after-rollback.txt`, plus `helm-history-final.txt` showing the full revision chain (install → upgrade → upgrade → upgrade → rollback → upgrade → rollback). Live cluster state — `get pods` / `helm list` / `helm history` / `rollout status` — in [`docs/evidence/kubectl-helm-status.png`](docs/evidence/kubectl-helm-status.png).
+The `/version` endpoint makes rollouts observable end-to-end. With `helm upgrade --set image.tag=<new>` the response flips to the new tag; `helm rollback` immediately flips it back. Evidence captured to `docs/evidence/rollout/version-before-bump.txt`, `version-after-bump.txt`, `version-after-rollback.txt`, plus `helm-history-final.txt` showing the full revision chain (install → upgrade → upgrade → upgrade → rollback → upgrade → rollback). Live cluster state — `get pods` / `helm list` / `helm history` / `rollout status` — in [`docs/evidence/rollout/kubectl-helm-status.png`](docs/evidence/rollout/kubectl-helm-status.png).
 
 ## Chaos test
 
@@ -122,7 +122,7 @@ Killed one pod from a 3-replica deployment to observe Kubernetes self-healing:
 kubectl delete pod <one-of-three-pods>
 ```
 
-A replacement pod was scheduled within ~2 seconds and reached `Ready` shortly after. Replica count stayed at 3 throughout because HPA's `minReplicas: 3` floor enforces it independent of CPU metrics. What I learned: the Deployment controller doesn't wait for the dead pod to be `Terminated` before creating the replacement — it reacts to the desired-vs-actual delta immediately, so a graceful shutdown drain and a new pod's startup overlap cleanly. Evidence in `docs/evidence/chaos-*.txt`.
+A replacement pod was scheduled within ~2 seconds and reached `Ready` shortly after. Replica count stayed at 3 throughout because HPA's `minReplicas: 3` floor enforces it independent of CPU metrics. What I learned: the Deployment controller doesn't wait for the dead pod to be `Terminated` before creating the replacement — it reacts to the desired-vs-actual delta immediately, so a graceful shutdown drain and a new pod's startup overlap cleanly. Evidence in `docs/evidence/chaos/chaos-*.txt`.
 
 ## Production-aware extras
 
@@ -133,6 +133,21 @@ A replacement pod was scheduled within ~2 seconds and reached `Ready` shortly af
 - **Request-ID middleware** generates `X-Request-ID` per request and emits it on every log line.
 - **Structured JSON logs** via `log/slog` — fields: `timestamp, level, msg, request_id, method, path, status, duration_ms`. `/healthz`, `/readyz`, `/metrics` are demoted to `DEBUG` to avoid probe noise.
 - **Graceful shutdown** — on SIGTERM, flips `/readyz` to 503 and drains in-flight requests (15s deadline) so Kubernetes rolling updates don't drop traffic.
+
+## CI/CD
+
+`.github/workflows/ci-cd.yml` runs on every PR and push: lint + race tests, gitleaks secret scan, helm lint, and a Trivy image scan that fails on CRITICAL/HIGH. On `main` and `v*` tags it also pushes to GHCR, signs the image with cosign (keyless OIDC), and produces + attests an SPDX SBOM. A push to `main` ends with an auto-deploy to EC2 over SSM; a `v*` tag cuts a GitHub Release instead (deploy is skipped).
+
+- [Green pipeline run](docs/evidence/cicd/ci-green.png) — `main` push: build → scan → sign → SBOM → deploy to EC2
+- [Release run](docs/evidence/cicd/release-run.png) — `v0.1.0` tag: GitHub-release job runs, deploy correctly skipped
+
+Verify a published image's signature:
+
+```sh
+cosign verify ghcr.io/aysukeskin/insiderone-devops-case:0.1.0 \
+  --certificate-identity-regexp 'https://github.com/AysuKeskin/insiderone-devops-case/.*' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
 
 ## Cloud infrastructure
 
@@ -169,13 +184,13 @@ Grafana admin password: `kubectl -n monitoring get secret monitoring-grafana -o 
 
 The dashboard (`docs/dashboards/insiderone-http.json`) shows RPS, p50/p95 latency, 5xx error rate, and pod restarts. Two alerts ship as a `PrometheusRule`: `HighErrorRate` (5xx ratio > 5% for 5m) and `AppDown` (target unscrapable for 2m). The `serviceMonitor`/`prometheusRule` toggles default to **off** so a normal install never needs the Prometheus Operator CRDs.
 
-![Grafana dashboard](docs/evidence/grafana-dashboard.png)
+![Grafana dashboard](docs/evidence/observability/grafana-dashboard.png)
 
 Evidence captured from a local run:
-- [Grafana dashboard](docs/evidence/grafana-dashboard.png) — RPS, latency, pod restarts
-- [Prometheus target UP](docs/evidence/prometheus-targets.png) — the app's ServiceMonitor endpoint scraping
-- [Scraped metrics](docs/evidence/prometheus-metrics.png) — `http_requests_total` by route
-- [Alert rules loaded](docs/evidence/alert-rules.png) — `HighErrorRate` + `AppDown`
+- [Grafana dashboard](docs/evidence/observability/grafana-dashboard.png) — RPS, latency, pod restarts
+- [Prometheus target UP](docs/evidence/observability/prometheus-targets.png) — the app's ServiceMonitor endpoint scraping
+- [Scraped metrics](docs/evidence/observability/prometheus-metrics.png) — `http_requests_total` by route
+- [Alert rules loaded](docs/evidence/observability/alert-rules.png) — `HighErrorRate` + `AppDown`
 
 ## Layout
 
@@ -191,5 +206,5 @@ Evidence captured from a local run:
 | `.github/workflows/` | `ci-cd.yml`: build → scan → sign → push → SSM deploy |
 | `docs/adr/` | architecture decision records (Days 1–4) |
 | `docs/dashboards/` | Grafana dashboard JSON |
-| `docs/evidence/` | command-output + screenshot evidence |
+| `docs/evidence/` | evidence by theme: `cicd/`, `observability/`, `rollout/`, `chaos/` |
 | `docs/architecture.*` | architecture diagram (draw.io — PNG embed + SVG vector/source) |
