@@ -30,9 +30,6 @@ Adopting a GitOps controller would mean installing and operating another
 cluster-side component for a 4-day slice that already has one Deployment and
 one Service to manage. The push-from-CI model is simple, observable in the
 Actions UI, and aligned with the case's "smallest working slice" guidance.
-The natural next iteration would be Flux plus image-automation, watching the
-GHCR digest written by the CI job; this ADR documents that direction without
-adopting it yet.
 
 ## ADR 008 - t3.medium over the free-tier t2.micro
 
@@ -61,7 +58,5 @@ rollout-dev`, 1 replica, debug logs) and `values-prod.yaml` is what the CD
 pipeline deploys to the **EC2** cluster. We deliberately do not also run a
 `dev` release on the same EC2 host: a single node gives no real isolation, so
 a second release would be theater rather than a distinct environment, and
-prod's `helm upgrade --atomic` already auto-rolls-back a bad image. A genuine
-cloud dev environment would be a separate cluster (or a manual approval gate
-between stages); both are out of scope for this single-node slice. The dev
+prod's `helm upgrade --atomic` already auto-rolls-back a bad image. The dev
 values are still exercised — locally and by the `helm lint` job in CI.

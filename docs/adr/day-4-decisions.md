@@ -33,11 +33,20 @@ to the handful of registered routes, with unmatched requests collapsed to
 `"unmatched"`. The `/metrics` endpoint itself is excluded from the counter so that
 Prometheus's own scrapes don't inflate the RPS panels.
 
-## Deferred (future iterations, intentionally out of scope)
+## ADR 012 - HTTPS via cert-manager + Let's Encrypt (DNS-01), behind Cloudflare
 
-- **Slack alerting (Going further #5)** — wiring Alertmanager to a Slack webhook.
-  The `HighErrorRate` PrometheusRule already proves the alerting path end to end;
-  routing it to Slack is a configuration add-on, deferred to keep scope tight.
-- **Policy-as-Code with Kyverno (Going further #1)** — the chart already meets the
-  policies it would enforce (non-root, read-only FS, no `:latest` in prod), so
-  Kyverno would mostly assert what is already true; deferred as a next step.
+Status: Accepted
+
+The public endpoint is served over HTTPS on a custom domain (Going further #6).
+The origin certificate is issued by cert-manager from Let's Encrypt and the
+ingress (`ingress-nginx`) terminates TLS; Cloudflare sits in front in
+**Full (strict)** mode, so the connection is encrypted browser→Cloudflare and
+Cloudflare→origin. We chose the **DNS-01** ACME challenge (Cloudflare API token)
+over HTTP-01 because DNS-01 works regardless of Cloudflare's proxy state — an
+HTTP-01 challenge has to reach the origin on port 80, which is awkward when the
+orange-cloud proxy and Full-strict are both on. TLS is **opt-in** in the chart
+(`ingress.tls.*`, off by default) and applied via the `values-tls.yaml` overlay,
+so the default raw-IP deploy keeps working and `helm lint`/CI never need the
+cert-manager CRDs. Tradeoff: a Cloudflare API token now lives as a cluster
+secret (scoped to Zone:DNS:Edit), and cert-manager is one more component on the
+EC2 node.
