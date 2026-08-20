@@ -18,7 +18,7 @@ provider "aws" {
 
   default_tags {
     tags = {
-      Project   = "insiderone-devops-case"
+      Project   = "kube-pulse"
       ManagedBy = "terraform"
       Owner     = var.github_owner
     }

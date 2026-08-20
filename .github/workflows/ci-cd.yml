@@ -18,7 +18,7 @@ concurrency:
 
 env:
   GO_VERSION: "1.25"
-  IMAGE: ghcr.io/aysukeskin/insiderone-devops-case
+  IMAGE: ghcr.io/aysukeskin/kube-pulse
 
 jobs:
   lint-and-test:
@@ -31,9 +31,9 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: true
       - name: go vet
-        run: go vet ./...
+        run: go vet ./... # şüpheli format kullanımı, yanlış API kullanımı gibi statik hataları bulur.
       - name: go test (race + cover)
-        run: go test ./... -race -cover
+        run: go test ./... -race -cover # -race ile data race tespit eder,-cover ile coverage raporu üretir.
 
   secret-scan:
     name: secret scan
@@ -56,8 +56,8 @@ jobs:
       - uses: azure/setup-helm@v4
       - name: lint chart against dev and prod values
         run: |
-          helm lint helm/insiderone-devops-case -f helm/insiderone-devops-case/values-dev.yaml
-          helm lint helm/insiderone-devops-case -f helm/insiderone-devops-case/values-prod.yaml
+          helm lint helm/kube-pulse -f helm/kube-pulse/values-dev.yaml
+          helm lint helm/kube-pulse -f helm/kube-pulse/values-prod.yaml
 
   build-scan-push:
     name: build, scan, push
@@ -103,7 +103,7 @@ jobs:
           context: .
           load: true
           push: false
-          tags: local/insiderone-devops-case:scan
+          tags: local/kube-pulse:scan
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
@@ -114,7 +114,7 @@ jobs:
       - name: Trivy vulnerability scan (CRITICAL/HIGH gate)
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: local/insiderone-devops-case:scan
+          image-ref: local/kube-pulse:scan
           severity: CRITICAL,HIGH
           exit-code: "1"
           ignore-unfixed: true
@@ -289,15 +289,15 @@ jobs:
           instance-id: ${{ secrets.EC2_INSTANCE_ID }}
           label: deploy
           command: >-
-            cd /opt/app && git pull --ff-only &&
-            helm upgrade --install insiderone-devops-case ./helm/insiderone-devops-case
-            -f helm/insiderone-devops-case/values-prod.yaml
+            cd /opt/app && git fetch origin main && git reset --hard origin/main &&
+            helm upgrade --install kube-pulse ./helm/kube-pulse
+            -f helm/kube-pulse/values-prod.yaml
             --set-string image.tag=${{ steps.tag.outputs.tag }}
             --atomic --timeout 3m &&
-            kubectl rollout status deployment/insiderone-devops-case --timeout=3m &&
-            echo === helm history === && helm history insiderone-devops-case --max 5 &&
+            kubectl rollout status deployment/kube-pulse --timeout=3m &&
+            echo === helm history === && helm history kube-pulse --max 5 &&
             echo === pods === &&
-            kubectl get pods -l app.kubernetes.io/name=insiderone-devops-case -o wide
+            kubectl get pods -l app.kubernetes.io/name=kube-pulse -o wide
 
       - name: deploy summary
         run: |

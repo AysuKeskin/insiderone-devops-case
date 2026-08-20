@@ -1,4 +1,4 @@
-APP        := insiderone-devops-case
+APP        := kube-pulse
 GH_OWNER   ?= aysukeskin
 IMAGE      := ghcr.io/$(GH_OWNER)/$(APP)
 VERSION    := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
@@ -6,8 +6,8 @@ COMMIT     := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 BUILT_AT   := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 TAG        ?= $(COMMIT)
 
-CHART      := helm/insiderone-devops-case
-RELEASE    := insiderone-devops-case
+CHART      := helm/kube-pulse
+RELEASE    := kube-pulse
 
 MONITORING_NS := monitoring
 

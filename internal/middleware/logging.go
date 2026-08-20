@@ -11,12 +11,12 @@ type statusRecorder struct {
 	status int
 }
 
-func (r *statusRecorder) WriteHeader(code int) {
+func (r *statusRecorder) WriteHeader(code int) { // should be pointer since we want to change the status field of the struct
 	r.status = code
-	r.ResponseWriter.WriteHeader(code)
+	r.ResponseWriter.WriteHeader(code) // codeu yazar ama doğrudan vermez
 }
 
-func AccessLog(logger *slog.Logger) func(http.Handler) http.Handler {
+func AccessLog(logger *slog.Logger) func(http.Handler) http.Handler { // returns the handler
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
@@ -29,14 +29,16 @@ func AccessLog(logger *slog.Logger) func(http.Handler) http.Handler {
 				level = slog.LevelDebug
 			}
 
-			logger.LogAttrs(r.Context(), level, "http request",
+			logger.LogAttrs(r.Context(), level, "http request", // loger a bilgi verir ve zorunlu
 				slog.String("request_id", FromContext(r.Context())),
 				slog.String("method", r.Method),
 				slog.String("path", r.URL.Path),
 				slog.Int("status", rec.status),
 				slog.Int64("duration_ms", time.Since(start).Milliseconds()),
-				slog.String("remote", r.RemoteAddr),
+				slog.String("remote", r.RemoteAddr), // procy client ip:port
 			)
 		})
 	}
 }
+
+// r -> http request, w -> interface used to write response

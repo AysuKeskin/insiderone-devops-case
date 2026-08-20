@@ -24,7 +24,7 @@ ingress:
   host: devops-case.aysu-keskin.uk
   tls:
     enabled: true
-    secretName: insiderone-devops-case-tls
+    secretName: kube-pulse-tls
     clusterIssuer: letsencrypt-dns
 
 hpa:

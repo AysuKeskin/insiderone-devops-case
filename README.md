@@ -1,9 +1,14 @@
-# insiderone-devops-case
+# kube-pulse
 
-A tiny Go HTTP service for the Insider One DevOps 2026 case study.
-End-to-end slice: app → container → Helm/minikube → CI/CD → observability → public URL.
+A small Go HTTP service, taken end to end: app → container → Helm/minikube →
+CI/CD → observability → a public HTTPS URL.
 
-**Track:** A — minikube on AWS EC2, exposed over HTTPS on a custom domain. Live demo: `curl https://devops-case.aysu-keskin.uk/ping` → `pong` ([evidence](docs/evidence/public-url/public-url-ping.png)).
+The service itself is deliberately tiny. The point of the project is everything
+around it — a hardened image, a real Helm chart with dev/prod values, a pipeline
+that scans and signs what it ships, Terraform-provisioned infrastructure, and
+metrics and alerts that actually fire.
+
+Live: `curl https://devops-case.aysu-keskin.uk/ping` → `pong`
 
 Security posture and reporting: see [SECURITY.md](SECURITY.md). Design decisions: [`docs/adr/`](docs/adr/).
 
@@ -88,8 +93,8 @@ make rollback                            # revert to the previous revision and w
 
 `make deploy-dev` and `make deploy-prod` set `image.pullPolicy=Never` only for
 this local minikube flow, because the image is loaded directly into minikube.
-For the later EC2/GHCR deployment, the chart default `IfNotPresent` is used
-instead, or CI can override it explicitly.
+For the EC2/GHCR deployment, the chart default `IfNotPresent` is used instead,
+or CI overrides it explicitly.
 
 The `values-dev.yaml` and `values-prod.yaml` deliberately differ on replica count, log level, resources, ingress host, and HPA settings — see those files for the deltas. Resource requests/limits are conservative starting estimates for a static Go binary that idles near zero CPU and ~10 Mi memory; dev sits at the floor (50m / 64Mi requests) and prod doubles both for traffic headroom. They can be tuned against real `kubectl top pod` numbers under sustained load.
 
@@ -104,25 +109,29 @@ The two values files map to where each is actually run:
 | Replicas / logs | 1 / debug | 3 + HPA / info |
 | Ingress | `tiny.dev.local` | `devops-case.aysu-keskin.uk` (HTTPS) + raw-IP catch-all |
 
-`dev` is the local developer loop; `prod` is the real cloud target. I intentionally do **not** run a second `dev` release on the same EC2 host — one node gives no real isolation, so it would be a duplicate rather than a distinct environment, and prod's `helm --atomic` already guards against a bad image. See `docs/adr/day-3-decisions.md` (ADR 009).
+`dev` is the local developer loop; `prod` is the real cloud target. I intentionally do **not** run a second `dev` release on the same EC2 host — one node gives no real isolation, so it would be a duplicate rather than a distinct environment, and prod's `helm --atomic` already guards against a bad image. See [ADR 015](docs/adr/cicd-and-infrastructure.md).
 
 ### Rollout strategy
 
 Deployments use an explicit `RollingUpdate` with `maxSurge: 1, maxUnavailable: 0`. The intent is **safe and verifiable rollout/rollback over raw speed** — I'd rather have a predictable pod footprint in small clusters (minikube on a laptop, single-node EC2) than save a handful of seconds by surging to 2× replicas. Even when HPA scales the deployment to 10 replicas, only one extra pod ever exists during a rollout. At `maxUnavailable: 0` the chart never drops below desired capacity, so client requests keep flowing while the new image takes over. This pairs with the app's graceful SIGTERM drain to deliver true zero-downtime rollouts.
 
-### Rollout & rollback exercise
+### Rollout & rollback
 
-The `/version` endpoint makes rollouts observable end-to-end. With `helm upgrade --set image.tag=<new>` the response flips to the new tag; `helm rollback` immediately flips it back. Evidence captured to `docs/evidence/rollout/version-before-bump.txt`, `version-after-bump.txt`, `version-after-rollback.txt`, plus `helm-history-final.txt` showing the full revision chain (install → upgrade → upgrade → upgrade → rollback → upgrade → rollback). Live cluster state — `get pods` / `helm list` / `helm history` / `rollout status` — in [`docs/evidence/rollout/kubectl-helm-status.png`](docs/evidence/rollout/kubectl-helm-status.png).
+The `/version` endpoint makes rollouts observable end to end. With
+`helm upgrade --set image.tag=<new>` the response flips to the new tag, and
+`helm rollback` immediately flips it back — `helm history` shows the full
+revision chain. This is the fastest way to confirm that a deploy actually
+replaced the running image rather than merely reporting success.
 
 ## Chaos test
 
-Killed one pod from a 3-replica deployment to observe Kubernetes self-healing:
+Killing one pod from a 3-replica deployment to observe Kubernetes self-healing:
 
 ```sh
 kubectl delete pod <one-of-three-pods>
 ```
 
-A replacement pod was scheduled within ~2 seconds and reached `Ready` shortly after. Replica count stayed at 3 throughout because HPA's `minReplicas: 3` floor enforces it independent of CPU metrics. What I learned: the Deployment controller doesn't wait for the dead pod to be `Terminated` before creating the replacement — it reacts to the desired-vs-actual delta immediately, so a graceful shutdown drain and a new pod's startup overlap cleanly. Evidence in `docs/evidence/chaos/chaos-*.txt`.
+A replacement pod is scheduled within ~2 seconds and reaches `Ready` shortly after. The replica count stays at 3 throughout because HPA's `minReplicas: 3` floor enforces it independent of CPU metrics. What this shows: the Deployment controller doesn't wait for the dead pod to be `Terminated` before creating the replacement — it reacts to the desired-vs-actual delta immediately, so a graceful shutdown drain and a new pod's startup overlap cleanly.
 
 ## Production-aware extras
 
@@ -133,83 +142,60 @@ A replacement pod was scheduled within ~2 seconds and reached `Ready` shortly af
 - **Request-ID middleware** generates `X-Request-ID` per request and emits it on every log line.
 - **Structured JSON logs** via `log/slog` — fields: `timestamp, level, msg, request_id, method, path, status, duration_ms`. `/healthz`, `/readyz`, `/metrics` are demoted to `DEBUG` to avoid probe noise.
 - **Graceful shutdown** — on SIGTERM, flips `/readyz` to 503 and drains in-flight requests (15s deadline) so Kubernetes rolling updates don't drop traffic.
+- **HPA** — CPU-based autoscaling, min 3 / max 10 at 70%. Needs metrics-server plus resource requests to compute utilization; `minReplicas` is a hard floor independent of CPU.
 
 ## CI/CD
 
 `.github/workflows/ci-cd.yml` runs on every PR and push: lint + race tests, gitleaks secret scan, helm lint, and a Trivy image scan that fails on CRITICAL/HIGH. On `main` and `v*` tags it also pushes to GHCR, signs the image with cosign (keyless OIDC), and produces + attests an SPDX SBOM. A push to `main` ends with an auto-deploy to EC2 over SSM; a `v*` tag cuts a GitHub Release instead (deploy is skipped).
 
-- [Green pipeline run](docs/evidence/cicd/ci-green.png) — `main` push: build → scan → sign → SBOM → deploy to EC2
-- [Release run](docs/evidence/cicd/release-run.png) — `v0.1.0` tag: GitHub-release job runs, deploy correctly skipped
-
-Verify a published image's signature:
+Keyless signing needs `id-token: write` on the job, and the SBOM is bound to the
+image as a cosign attestation rather than shipped as a loose file, so it can be
+verified against the digest:
 
 ```sh
-cosign verify ghcr.io/aysukeskin/insiderone-devops-case:0.1.0 \
-  --certificate-identity-regexp 'https://github.com/AysuKeskin/insiderone-devops-case/.*' \
+cosign verify ghcr.io/aysukeskin/kube-pulse:0.1.0 \
+  --certificate-identity-regexp 'https://github.com/AysuKeskin/kube-pulse/.*' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
 ## Cloud infrastructure
 
-Track A target: a single EC2 host in `eu-north-1` running minikube, reachable on an Elastic IP. Provisioned with Terraform under `infra/terraform/`.
+A single EC2 host in `eu-north-1` running minikube, reachable on an Elastic IP. Provisioned with Terraform under `infra/terraform/`.
 
 ```sh
 cd infra/terraform
 terraform init
 terraform apply             # ~3 min; spins up EC2 + EIP + SG + GitHub OIDC role
 terraform output            # AWS_REGION, AWS_ROLE_ARN, EC2_INSTANCE_ID for GH secrets
-terraform destroy           # full teardown when the demo window is closed
+terraform destroy           # full teardown
 ```
 
-The stack is intentionally narrow: no SSH (port 22 is closed at the SG), no long-lived AWS keys (GitHub Actions assumes the `gha_deploy` role via OIDC), and no GHCR secret on the host (the image is published as a public package, so minikube pulls anonymously). See `docs/adr/day-3-decisions.md` for the deploy-via-SSM and `t3.medium` tradeoffs.
+The stack is intentionally narrow: no SSH (port 22 is closed at the SG), no long-lived AWS keys (GitHub Actions assumes the `gha_deploy` role via OIDC), and no GHCR secret on the host (the image is published as a public package, so minikube pulls anonymously). See [`docs/adr/cicd-and-infrastructure.md`](docs/adr/cicd-and-infrastructure.md) for the deploy-via-SSM and `t3.medium` tradeoffs.
 
 ## Observability
 
-The app exposes Prometheus metrics at `/metrics` (`http_requests_total`, `http_request_duration_seconds`, plus Go/process collectors). Monitoring runs on **local minikube** (the EC2 box is sized for the app, not a full stack — see `docs/adr/day-4-decisions.md`).
+The app exposes Prometheus metrics at `/metrics` (`http_requests_total`, `http_request_duration_seconds`, plus Go/process collectors). Monitoring runs on **local minikube** — the EC2 box is sized for the app, not a full stack (see [ADR 016](docs/adr/observability-and-tls.md)).
 
 ```sh
 make monitoring-install                  # kube-prometheus-stack into the `monitoring` ns
 # deploy the app with the Prometheus Operator objects switched on:
-helm upgrade --install insiderone-devops-case helm/insiderone-devops-case \
-  -f helm/insiderone-devops-case/values-dev.yaml \
+helm upgrade --install kube-pulse helm/kube-pulse \
+  -f helm/kube-pulse/values-dev.yaml \
   --set image.pullPolicy=Never \
   --set metrics.serviceMonitor.enabled=true \
   --set metrics.prometheusRule.enabled=true
 make monitoring-prometheus               # localhost:9090 → Status/Targets shows the app endpoint UP
-make monitoring-grafana                  # localhost:3000 → import docs/dashboards/insiderone-http.json
+make monitoring-grafana                  # localhost:3000 → import docs/dashboards/kube-pulse-http.json
 make load-gen                            # generate traffic so the panels move
 ```
 
 Grafana admin password: `kubectl -n monitoring get secret monitoring-grafana -o jsonpath='{.data.admin-password}' | base64 -d`.
 
-The dashboard (`docs/dashboards/insiderone-http.json`) shows RPS, p50/p95 latency, 5xx error rate, and pod restarts. Two alerts ship as a `PrometheusRule`: `HighErrorRate` (5xx ratio > 5% for 5m) and `AppDown` (target unscrapable for 2m). The `serviceMonitor`/`prometheusRule` toggles default to **off** so a normal install never needs the Prometheus Operator CRDs.
+The dashboard (`docs/dashboards/kube-pulse-http.json`) shows RPS, p50/p95 latency, 5xx error rate, and pod restarts. Two alerts ship as a `PrometheusRule`: `HighErrorRate` (5xx ratio > 5% for 5m) and `AppDown` (target unscrapable for 2m). The `serviceMonitor`/`prometheusRule` toggles default to **off** so a normal install never needs the Prometheus Operator CRDs.
 
-![Grafana dashboard](docs/evidence/observability/grafana-dashboard.png)
+## TLS
 
-Evidence captured from a local run:
-- [Grafana dashboard](docs/evidence/observability/grafana-dashboard.png) — RPS, latency, pod restarts
-- [Prometheus target UP](docs/evidence/observability/prometheus-targets.png) — the app's ServiceMonitor endpoint scraping
-- [Scraped metrics](docs/evidence/observability/prometheus-metrics.png) — `http_requests_total` by route
-- [Alert rules loaded](docs/evidence/observability/alert-rules.png) — `HighErrorRate` + `AppDown`
-
-## Bonuses
-
-Beyond the core slice: three "going further" items (#2, #4, #6) plus the Day 2 HPA bonus — each with a note on how and what it taught:
-
-- **Supply chain** — CI signs every image with cosign (keyless OIDC), produces a Syft SPDX SBOM, and binds it to the image with `cosign attest`. *Learned:* keyless signing needs `id-token: write`, and an SBOM is far more useful as an attestation (verifiable against the digest) than a loose file. Verify commands in [SECURITY.md](SECURITY.md).
-- **Custom domain + TLS** — HTTPS via cert-manager + Let's Encrypt with a DNS-01 (Cloudflare) challenge; the ingress terminates TLS behind Cloudflare Full (strict). *Learned:* DNS-01 is far more reliable than HTTP-01 behind a Cloudflare proxy, and a token with a trailing newline surfaces as Cloudflare error 6111 (header format), not an auth error. Setup in [RUNBOOK.md](RUNBOOK.md) → "TLS / HTTPS".
-- **Chaos test** — killed a pod and watched the Deployment self-heal (see [Chaos test](#chaos-test) above). *Learned:* the controller reacts to the desired-vs-actual delta immediately, so drain and new-pod startup overlap cleanly.
-- **HPA (Day 2 bonus)** — CPU-based autoscaling, min 3 / max 10 at 70%. *Learned:* HPA needs metrics-server + resource requests to compute utilization, and `minReplicas` is a hard floor independent of CPU.
-
-## AI usage
-
-I used AI assistants (Claude Code and ChatGPT/Codex) as pair programmers for
-scaffolding, command sequencing, debugging, and documentation review — drafting
-Makefile/Helm/TLS steps, explaining CI/CD and cert-manager errors, and tightening
-the README, RUNBOOK, and ADR wording. I owned the architecture decisions and
-secret handling, made the final call on every edit, and verified the result
-myself with local tests plus `helm`, `kubectl`, AWS SSM, GitHub Actions, and live
-endpoint checks.
+HTTPS via cert-manager + Let's Encrypt with a DNS-01 (Cloudflare) challenge; the ingress terminates TLS behind Cloudflare Full (strict). DNS-01 is more reliable than HTTP-01 behind a Cloudflare proxy, since it only needs a TXT record rather than reaching the origin on port 80. Setup steps in [RUNBOOK.md](RUNBOOK.md) → "TLS / HTTPS".
 
 ## Layout
 
@@ -220,10 +206,9 @@ endpoint checks.
 | `internal/middleware/` | request-id, access log, metrics |
 | `internal/metrics/` | Prometheus collectors (`http_requests_total`, duration histogram) |
 | `internal/version/` | ldflags-populated build info |
-| `helm/insiderone-devops-case/` | chart: Deployment, Service, Ingress, ConfigMap, Secret, HPA, ServiceMonitor, PrometheusRule, `values-dev/prod.yaml` |
-| `infra/terraform/` | EC2, EIP, SG, IAM OIDC role (Track A) |
+| `helm/kube-pulse/` | chart: Deployment, Service, Ingress, ConfigMap, Secret, HPA, ServiceMonitor, PrometheusRule, `values-dev/prod.yaml` |
+| `infra/terraform/` | EC2, EIP, SG, IAM OIDC role |
 | `.github/workflows/` | `ci-cd.yml`: build → scan → sign → push → SSM deploy |
-| `docs/adr/` | architecture decision records (Days 1–4) |
+| `docs/adr/` | architecture decision records |
 | `docs/dashboards/` | Grafana dashboard JSON |
-| `docs/evidence/` | evidence by theme: `cicd/`, `observability/`, `rollout/`, `chaos/` |
 | `docs/architecture.*` | architecture diagram (draw.io — PNG embed + SVG vector/source) |

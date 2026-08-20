@@ -1,5 +1,5 @@
 # Local development only. Production deploys via the Helm chart in
-# helm/insiderone-devops-case/ to Kubernetes (minikube on EC2).
+# helm/kube-pulse/ to Kubernetes (minikube on EC2).
 #
 # PORT and HOST_PORT come from .env (see .env.example). Defaults are
 # 8080 because non-root containers cannot bind to ports < 1024.
@@ -11,7 +11,7 @@ services:
       args:
         VERSION: dev
         COMMIT: local
-    image: insiderone-devops-case:local
+    image: kube-pulse:local
     ports:
       - "${HOST_PORT:-8080}:${PORT:-8080}"
     environment:

@@ -10,7 +10,6 @@ description = "Globally trusted paths and known-safe placeholders"
 paths = [
   '''\.gitleaks\.toml$''',
   '''(^|/)\.env\.example$''',
-  '''(^|/)docs/evidence/.*''',
   '''(^|/)go\.sum$''',
 ]
 # Allow only the obvious placeholder *values* used in .env.example and docs.

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Bootstraps the EC2 host for minikube + helm + the case-study app.
+# Bootstraps the EC2 host for minikube + helm + the app.
 # Runs once at first boot via cloud-init. Idempotent: re-running is safe.
 #
 # Cluster ownership: minikube/kubectl/helm run as ec2-user (kubeconfig in

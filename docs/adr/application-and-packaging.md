@@ -1,8 +1,8 @@
-# Day 1-2 Architecture Decisions
+# Application and Packaging Decisions
 
-This file captures the main Day 1 and Day 2 decisions so the reasoning stays
-visible during the rest of the case study. Each note follows a lightweight ADR
-style: status, context, decision, and consequences.
+Decisions about the service itself, its container image, and its Helm chart.
+Each note follows a lightweight ADR style: status, context, decision, and
+consequences. Numbering runs across all three ADR files in this directory.
 
 ## ADR 001 - Go for the HTTP Service
 
@@ -44,7 +44,7 @@ Distroless images do not include curl, wget, or a shell, so a shell-based
 Docker healthcheck would weaken the runtime image choice. Instead, the server
 binary supports a `healthcheck` command that calls `/healthz` with a short
 timeout and exits non-zero on failure. This keeps the image minimal while still
-satisfying the Day 1 container healthcheck expectation.
+giving the container runtime a real healthcheck.
 
 ## ADR 005 - Separate Liveness and Readiness
 
@@ -98,16 +98,16 @@ speed, which is a better fit for a small minikube cluster on a laptop or EC2.
 The rollout may take a few extra seconds, but it never intentionally drops below
 desired capacity and works well with readiness probes plus graceful shutdown.
 
-## ADR 010 - Local Minikube Image Loading for Day 2
+## ADR 010 - Local Minikube Image Loading
 
 Status: Accepted
 
-For the Day 2 local minikube workflow, `make deploy-dev` and `make deploy-prod`
-set `image.pullPolicy=Never` because the image is loaded directly with
-`minikube image load`. This avoids needing GHCR before the CI/CD day and keeps
-the Day 2 checkpoint reproducible offline after the local build. For the later
-EC2/GHCR flow, the chart default remains `IfNotPresent` and CI can override the
-image tag explicitly.
+For the local minikube workflow, `make deploy-dev` and `make deploy-prod` set
+`image.pullPolicy=Never` because the image is loaded directly with
+`minikube image load`. This keeps the local loop reproducible offline and
+independent of the registry, so a developer can iterate without pushing to GHCR
+first. For the EC2/GHCR flow the chart default remains `IfNotPresent`, and CI
+overrides the image tag explicitly.
 
 ## ADR 011 - Empty Secret Template, No Real Secrets in Git
 
@@ -116,5 +116,5 @@ Status: Accepted
 The Helm chart includes a Secret template so the Kubernetes contract contains
 both ConfigMap and Secret resources, but `secret.stringData` is empty by
 default. Real values must come from `--set`, CI secrets, or a future external
-secret manager rather than being committed to Git. This keeps the chart complete
-for the case requirements while preserving the no-plaintext-secrets rule.
+secret manager rather than being committed to Git. This keeps the chart's
+resource contract complete while preserving the no-plaintext-secrets rule.

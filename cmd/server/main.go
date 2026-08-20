@@ -16,9 +16,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/AysuKeskin/insiderone-devops-case/internal/handlers"
-	"github.com/AysuKeskin/insiderone-devops-case/internal/middleware"
-	"github.com/AysuKeskin/insiderone-devops-case/internal/version"
+	"github.com/AysuKeskin/kube-pulse/internal/handlers"
+	"github.com/AysuKeskin/kube-pulse/internal/middleware"
+	"github.com/AysuKeskin/kube-pulse/internal/version"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
@@ -48,9 +48,9 @@ func main() {
 	ready.Store(true)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /ping", handlers.Ping)
+	mux.HandleFunc("GET /ping", handlers.Ping) // doğrudan fonksiyon kullanarak handler ekliyoruz
 	mux.HandleFunc("GET /healthz", handlers.Healthz)
-	mux.Handle("GET /readyz", handlers.Readyz(&ready))
+	mux.Handle("GET /readyz", handlers.Readyz(&ready)) // handler interface ini implemente eden bir handler ekliyoruz
 	mux.HandleFunc("GET /version", handlers.Version)
 	mux.Handle("GET /metrics", promhttp.Handler())
 
@@ -62,7 +62,7 @@ func main() {
 	srv := &http.Server{
 		Addr:              addr,
 		Handler:           handler,
-		ReadHeaderTimeout: readHeaderTimeout,
+		ReadHeaderTimeout: readHeaderTimeout, //  only 5s to send headers to prevent slowloris attack
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -80,9 +80,9 @@ func main() {
 		}
 	}()
 
-	<-ctx.Done()
+	<-ctx.Done() // wait for shutdown signal
 	logger.Info("shutdown signal received")
-	ready.Store(false)
+	ready.Store(false) // kubernetes checks preodically.
 
 	// Give in-flight requests time to drain; readiness probe failures
 	// will steer new traffic away before this window closes.
@@ -96,7 +96,7 @@ func main() {
 	logger.Info("server stopped")
 }
 
-func newLogger(out io.Writer) *slog.Logger {
+func newLogger(out io.Writer) *slog.Logger { // come back
 	var level slog.Level
 	_ = level.UnmarshalText([]byte(strings.ToUpper(getenv("LOG_LEVEL", "INFO"))))
 	return slog.New(slog.NewJSONHandler(out, &slog.HandlerOptions{
@@ -115,20 +115,20 @@ func healthcheckEndpoint() string {
 }
 
 func runHealthcheck(endpoint string) int {
-	ctx, cancel := context.WithTimeout(context.Background(), healthcheckTimeout)
-	defer cancel()
+	ctx, cancel := context.WithTimeout(context.Background(), healthcheckTimeout) // background boş başlangıç contexti
+	defer cancel() // fonksiyon bitince cancel çağırarak context iptal edilir. Fonksiyonun osnunda çalışır
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil) // create req
 	if err != nil {
 		return 1
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req) // do req
 	if err != nil {
 		return 1
 	}
-	defer resp.Body.Close()
-	_, _ = io.Copy(io.Discard, resp.Body)
+	defer resp.Body.Close() // kapatılan kaynak
+	_, _ = io.Copy(io.Discard, resp.Body) // thia and body close is for tcp handsahke to not happend again on next req with same client
 
 	if resp.StatusCode != http.StatusOK {
 		return 1

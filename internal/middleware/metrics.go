@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/AysuKeskin/insiderone-devops-case/internal/metrics"
+	"github.com/AysuKeskin/kube-pulse/internal/metrics"
 )
 
 // Metrics records request count and latency for each request. The route label
@@ -18,10 +18,10 @@ func Metrics(next http.Handler) http.Handler {
 		next.ServeHTTP(rec, r)
 
 		if r.URL.Path == "/metrics" {
-			return
+			return // pometheus polling, not user traffic
 		}
 
-		route := r.Pattern
+		route := r.Pattern // example: GET user/:id
 		if route == "" {
 			route = "unmatched"
 		}

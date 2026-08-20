@@ -9,7 +9,7 @@ import (
 
 type ctxKey int
 
-const requestIDKey ctxKey = 0
+const requestIDKey ctxKey = 0 // if it was sting another midd can use it
 
 const HeaderRequestID = "X-Request-ID"
 
@@ -19,8 +19,8 @@ func RequestID(next http.Handler) http.Handler {
 		if id == "" {
 			id = uuid.NewString()
 		}
-		w.Header().Set(HeaderRequestID, id)
-		ctx := context.WithValue(r.Context(), requestIDKey, id)
+		w.Header().Set(HeaderRequestID, id) // client görsün diey header a derver içinde diğer şeyler görüsn diye de contexte yazılıyor
+		ctx := context.WithValue(r.Context(), requestIDKey, id) // key requestIDKey value id koy
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

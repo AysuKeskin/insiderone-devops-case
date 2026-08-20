@@ -2,16 +2,16 @@
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: {{ include "insiderone-devops-case.fullname" . }}
+  name: {{ include "kube-pulse.fullname" . }}
   labels:
-    {{- include "insiderone-devops-case.labels" . | nindent 4 }}
+    {{- include "kube-pulse.labels" . | nindent 4 }}
     # kube-prometheus-stack's Prometheus only selects ServiceMonitors carrying
     # this release label; it must match the monitoring Helm release name.
     release: {{ .Values.metrics.serviceMonitor.releaseLabel }}
 spec:
   selector:
     matchLabels:
-      {{- include "insiderone-devops-case.selectorLabels" . | nindent 6 }}
+      {{- include "kube-pulse.selectorLabels" . | nindent 6 }}
   endpoints:
     - port: http
       path: {{ .Values.metrics.serviceMonitor.path }}

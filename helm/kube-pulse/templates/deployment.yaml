@@ -1,9 +1,9 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "insiderone-devops-case.fullname" . }}
+  name: {{ include "kube-pulse.fullname" . }}
   labels:
-    {{- include "insiderone-devops-case.labels" . | nindent 4 }}
+    {{- include "kube-pulse.labels" . | nindent 4 }}
 spec:
   {{- if not .Values.hpa.enabled }}
   replicas: {{ .Values.replicaCount }}
@@ -14,11 +14,11 @@ spec:
   {{- end }}
   selector:
     matchLabels:
-      {{- include "insiderone-devops-case.selectorLabels" . | nindent 6 }}
+      {{- include "kube-pulse.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "insiderone-devops-case.selectorLabels" . | nindent 8 }}
+        {{- include "kube-pulse.selectorLabels" . | nindent 8 }}
       annotations:
         # Roll pods when ConfigMap changes so new env vars take effect.
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
@@ -44,10 +44,10 @@ spec:
               protocol: TCP
           envFrom:
             - configMapRef:
-                name: {{ include "insiderone-devops-case.fullname" . }}-config
+                name: {{ include "kube-pulse.fullname" . }}-config
             {{- if .Values.secret.enabled }}
             - secretRef:
-                name: {{ include "insiderone-devops-case.fullname" . }}-secret
+                name: {{ include "kube-pulse.fullname" . }}-secret
                 optional: true
             {{- end }}
           livenessProbe:

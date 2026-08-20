@@ -24,3 +24,7 @@ crash.log
 # Kube
 kubeconfig
 *.kubeconfig
+
+# Local-only working notes, never published
+IMPLEMENTATION_PLAN.md
+*.pdf

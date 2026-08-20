@@ -1,6 +1,6 @@
 # Security
 
-This is a case-study repository, but it is built with production security habits.
+This is a small personal project, but it is built with production security habits.
 This page covers how to report an issue and what protections are already in place.
 
 ## Reporting a vulnerability
@@ -26,17 +26,17 @@ Every image that reaches the registry has passed, in CI (`.github/workflows/ci-c
   credentials (only `.env.example` placeholders).
 - **cosign** — images are signed keyless via GitHub OIDC. Verify:
   ```sh
-  cosign verify ghcr.io/aysukeskin/insiderone-devops-case:<tag> \
-    --certificate-identity-regexp 'https://github.com/AysuKeskin/insiderone-devops-case/.*' \
+  cosign verify ghcr.io/aysukeskin/kube-pulse:<tag> \
+    --certificate-identity-regexp 'https://github.com/AysuKeskin/kube-pulse/.*' \
     --certificate-oidc-issuer https://token.actions.githubusercontent.com
   ```
 - **Syft SBOM** — an SPDX SBOM is produced for every image, attached to each
   GitHub Release, and bound to the image itself as a cosign attestation
   (`cosign attest --type spdxjson`). Verify the attestation:
   ```sh
-  cosign verify-attestation ghcr.io/aysukeskin/insiderone-devops-case:<tag> \
+  cosign verify-attestation ghcr.io/aysukeskin/kube-pulse:<tag> \
     --type spdxjson \
-    --certificate-identity-regexp 'https://github.com/AysuKeskin/insiderone-devops-case/.*' \
+    --certificate-identity-regexp 'https://github.com/AysuKeskin/kube-pulse/.*' \
     --certificate-oidc-issuer https://token.actions.githubusercontent.com
   ```
 - **Digest-pinned base images** — the Dockerfile pins both the build and runtime

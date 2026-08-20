@@ -1,4 +1,0 @@
-NAME                                     READY   STATUS    RESTARTS   AGE
-insiderone-devops-case-f5cfd84d6-dvmgb   1/1     Running   0          2m25s
-insiderone-devops-case-f5cfd84d6-fx2jg   1/1     Running   0          2m10s
-insiderone-devops-case-f5cfd84d6-wftfs   1/1     Running   0          11s

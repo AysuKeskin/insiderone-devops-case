@@ -2,15 +2,15 @@
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: {{ include "insiderone-devops-case.fullname" . }}
+  name: {{ include "kube-pulse.fullname" . }}
   labels:
-    {{- include "insiderone-devops-case.labels" . | nindent 4 }}
+    {{- include "kube-pulse.labels" . | nindent 4 }}
     # Same release-label requirement as the ServiceMonitor: Prometheus's
     # ruleSelector picks up PrometheusRules by this label.
     release: {{ .Values.metrics.prometheusRule.releaseLabel }}
 spec:
   groups:
-    - name: insiderone-devops-case
+    - name: kube-pulse
       rules:
         - alert: HighErrorRate
           expr: |
@@ -24,11 +24,11 @@ spec:
             description: "More than 5% of requests returned 5xx over the last 5m."
         - alert: AppDown
           expr: |
-            up{service="{{ include "insiderone-devops-case.fullname" . }}"} == 0
+            up{service="{{ include "kube-pulse.fullname" . }}"} == 0
           for: 2m
           labels:
             severity: critical
           annotations:
             summary: "app target down"
-            description: "Prometheus could not scrape the app for 2m (no Ready replica). Trigger demo: kubectl scale deploy/{{ include "insiderone-devops-case.fullname" . }} --replicas=0."
+            description: "Prometheus could not scrape the app for 2m (no Ready replica). Trigger demo: kubectl scale deploy/{{ include "kube-pulse.fullname" . }} --replicas=0."
 {{- end }}

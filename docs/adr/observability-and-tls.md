@@ -1,9 +1,9 @@
-# Day 4 Architecture Decisions
+# Observability and TLS Decisions
 
-Observability decisions, in the same lightweight ADR style as the earlier files.
-Numbering continues from `day-3-decisions.md`.
+Metrics, alerting, and public-endpoint decisions. Numbering continues from
+`cicd-and-infrastructure.md`.
 
-## ADR 010 - kube-prometheus-stack, run locally for the demo
+## ADR 016 - kube-prometheus-stack, run locally
 
 Status: Accepted
 
@@ -15,15 +15,16 @@ and alerts from inside its own chart.
 
 I run the stack on **local minikube**, not the EC2 host. The `t3.medium` (4 GB)
 already carries the app and minikube's control plane, and the full monitoring
-stack wants roughly 2 GB more than fits comfortably there. The deliverable is a
-dashboard screenshot and one alert, both of which the local stack covers, and
-this lines up with the dev=local / prod=cloud split (ADR 009).
+stack wants roughly 2 GB more than fits comfortably there. Running it locally
+still exercises the whole path — scrape config, dashboard, alert rules — and
+lines up with the dev=local / prod=cloud split (ADR 015).
 
-The cost: no always-on hosted Grafana. A production setup would give monitoring
-its own node or ship metrics to a hosted backend (Grafana Cloud, Amazon Managed
+The cost: no always-on hosted Grafana, so prod has metrics exposed but nothing
+continuously scraping them. A production setup would give monitoring its own
+node or ship metrics to a hosted backend (Grafana Cloud, Amazon Managed
 Prometheus).
 
-## ADR 011 - Metrics use the matched route, not the raw path, as a label
+## ADR 017 - Metrics use the matched route, not the raw path, as a label
 
 Status: Accepted
 
@@ -36,7 +37,7 @@ to the handful of registered routes, with unmatched requests collapsed to
 `"unmatched"`. The `/metrics` endpoint itself is excluded from the counter so that
 Prometheus's own scrapes don't inflate the RPS panels.
 
-## ADR 012 - HTTPS via cert-manager + Let's Encrypt (DNS-01), behind Cloudflare
+## ADR 018 - HTTPS via cert-manager + Let's Encrypt (DNS-01), behind Cloudflare
 
 Status: Accepted
 

@@ -1,4 +1,4 @@
-module github.com/AysuKeskin/insiderone-devops-case
+module github.com/AysuKeskin/kube-pulse
 
 go 1.25
 

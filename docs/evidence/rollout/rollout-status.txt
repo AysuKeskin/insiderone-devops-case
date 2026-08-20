@@ -1,1 +1,0 @@
-deployment "insiderone-devops-case" successfully rolled out

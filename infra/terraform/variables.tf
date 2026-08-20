@@ -19,7 +19,7 @@ variable "github_owner" {
 variable "github_repo" {
   description = "GitHub repository name for the OIDC trust policy and user-data git clone."
   type        = string
-  default     = "insiderone-devops-case"
+  default     = "kube-pulse"
 }
 
 variable "root_volume_size_gb" {

@@ -1,7 +1,7 @@
 // Package metrics defines the service's Prometheus collectors and a helper to
 // record one finished request. Registration uses the default registry, which
 // already exports Go runtime and process collectors through promhttp.Handler().
-package metrics
+package metrics // defines metrics and helper
 
 import (
 	"strconv"
@@ -24,7 +24,7 @@ var (
 
 	requestDuration = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Name:    "http_request_duration_seconds",
+			Name:    "http_request_duration _seconds",
 			Help:    "HTTP request latency in seconds by method and route.",
 			Buckets: prometheus.DefBuckets,
 		},

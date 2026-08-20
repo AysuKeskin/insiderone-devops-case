@@ -17,7 +17,7 @@ container, deploys to minikube on EC2 through CI/CD, and exposes a public URL.
 - **Container**: multi-stage Dockerfile on `gcr.io/distroless/static-debian12:nonroot`,
   non-root uid 65532, binary-mode `HEALTHCHECK`, OCI source labels, digest-pinned
   base images.
-- **Helm chart** (`helm/insiderone-devops-case`): Deployment, Service, Ingress,
+- **Helm chart** (`helm/kube-pulse`): Deployment, Service, Ingress,
   ConfigMap, Secret, HPA, with `values-dev.yaml` / `values-prod.yaml` overrides.
   Explicit `RollingUpdate` (`maxSurge: 1, maxUnavailable: 0`) for zero-downtime
   rollouts; separate liveness/readiness/startup probes; restricted pod and
@@ -32,7 +32,8 @@ container, deploys to minikube on EC2 through CI/CD, and exposes a public URL.
 - **Infrastructure** (`infra/terraform`): EC2 (t3.medium) + Elastic IP +
   security group (80/443 only, no SSH) + minikube bootstrap, plus the GitHub
   OIDC provider and a least-privilege deploy role scoped to this repo.
-- **Docs**: ADRs for Days 1-3 decisions, RUNBOOK, and a README front door.
+- **Docs**: ADRs covering the app, CI/CD, infrastructure, and observability
+  decisions, plus a RUNBOOK and a README front door.
 
 ### Security
 
@@ -41,4 +42,4 @@ container, deploys to minikube on EC2 through CI/CD, and exposes a public URL.
 - Supply chain: images are signed (cosign) and ship an SBOM (Syft); the base
   image is digest-pinned and Trivy gates every build.
 
-[0.1.0]: https://github.com/AysuKeskin/insiderone-devops-case/releases/tag/v0.1.0
+[0.1.0]: https://github.com/AysuKeskin/kube-pulse/releases/tag/v0.1.0

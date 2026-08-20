@@ -1,6 +1,0 @@
-apiVersion: v2
-name: insiderone-devops-case
-description: Tiny Go HTTP service for the Insider One DevOps 2026 case study.
-type: application
-version: 0.1.0
-appVersion: "0.1.0"

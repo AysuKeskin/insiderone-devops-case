@@ -7,7 +7,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/AysuKeskin/insiderone-devops-case/internal/version"
+	"github.com/AysuKeskin/kube-pulse/internal/version"
 )
 
 func TestPing(t *testing.T) {

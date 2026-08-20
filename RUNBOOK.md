@@ -1,6 +1,6 @@
 # Runbook
 
-Short incident-response guide for the `insiderone-devops-case` service running on
+Short incident-response guide for the `kube-pulse` service running on
 minikube on EC2 (app), with monitoring on local minikube (Prometheus + Grafana).
 
 ## Topology
@@ -8,7 +8,7 @@ minikube on EC2 (app), with monitoring on local minikube (Prometheus + Grafana).
 - **Host**: one EC2 instance (`t3.medium`, Amazon Linux 2023) in `eu-north-1`,
   fronted by an Elastic IP. Provisioned by `infra/terraform`.
 - **Cluster**: single-node minikube (docker driver), owned by `ec2-user`.
-  One release: `insiderone-devops-case` (default namespace).
+  One release: `kube-pulse` (default namespace).
 - **Access**: no SSH. Get a shell with
   `aws ssm start-session --target <instance-id> --region eu-north-1`.
 - **Public URL**: `https://devops-case.aysu-keskin.uk/` (Cloudflare → Elastic IP → ingress; the raw IP also answers over HTTP via a catch-all rule).
@@ -21,11 +21,11 @@ auto-rolls-back if it can't reach Ready). To deploy a specific tag by hand (or
 re-deploy after a fix), run it on the box inside an SSM session as ec2-user:
 
 ```sh
-cd /opt/app && git pull --ff-only
-helm upgrade --install insiderone-devops-case ./helm/insiderone-devops-case \
-  -f helm/insiderone-devops-case/values-prod.yaml \
+cd /opt/app && git fetch origin main && git reset --hard origin/main
+helm upgrade --install kube-pulse ./helm/kube-pulse \
+  -f helm/kube-pulse/values-prod.yaml \
   --set-string image.tag=sha-<short> --atomic --timeout 3m
-kubectl rollout status deployment/insiderone-devops-case --timeout=3m
+kubectl rollout status deployment/kube-pulse --timeout=3m
 ```
 
 ## Rollback
@@ -48,8 +48,8 @@ terraform -chdir=infra/terraform output -raw ec2_instance_id
 aws ssm start-session --target <instance-id> --region eu-north-1
 
 # 3) inside the session (runs as ec2-user, the cluster owner):
-sudo runuser -l ec2-user -c "helm history insiderone-devops-case"          # find the last good revision
-sudo runuser -l ec2-user -c "helm rollback insiderone-devops-case && kubectl rollout status deployment/insiderone-devops-case --timeout=2m"
+sudo runuser -l ec2-user -c "helm history kube-pulse"          # find the last good revision
+sudo runuser -l ec2-user -c "helm rollback kube-pulse && kubectl rollout status deployment/kube-pulse --timeout=2m"
 exit                                                                       # leave the SSM session
 
 # 4) confirm from anywhere:
@@ -57,14 +57,14 @@ curl -s https://devops-case.aysu-keskin.uk/version               # the tag rever
 ```
 
 To target a specific revision instead of the previous one:
-`helm rollback insiderone-devops-case <REV>`.
+`helm rollback kube-pulse <REV>`.
 
 ## Verify health
 
 ```sh
 curl -s https://devops-case.aysu-keskin.uk/ping        # → pong
 curl -s https://devops-case.aysu-keskin.uk/version     # → build sha + semver
-kubectl get pods -l app.kubernetes.io/name=insiderone-devops-case
+kubectl get pods -l app.kubernetes.io/name=kube-pulse
 kubectl get hpa,ingress,svc
 ```
 
@@ -72,10 +72,11 @@ kubectl get hpa,ingress,svc
 
 ```sh
 # tail structured JSON logs across all replicas
-kubectl logs -l app.kubernetes.io/name=insiderone-devops-case --tail=200 -f
+kubectl logs -l app.kubernetes.io/name=kube-pulse --tail=200 -f
+sudo runuser -l ec2-user -c "kubectl logs -l app.kubernetes.io/name=kube-pulse --tail=200 -f"
 # restart cleanly (rolling, zero-downtime via the chart's RollingUpdate)
-kubectl rollout restart deployment/insiderone-devops-case
-kubectl rollout status  deployment/insiderone-devops-case --timeout=2m
+kubectl rollout restart deployment/kube-pulse
+kubectl rollout status  deployment/kube-pulse --timeout=2m
 ```
 
 Every request line carries `request_id, method, path, status, duration_ms`; grep
@@ -84,15 +85,15 @@ at DEBUG to avoid probe noise (raise `LOG_LEVEL=debug` to see them).
 
 ## Secret rotation
 
-**App secret** (Helm-managed `insiderone-devops-case-secret`) — update the value and
+**App secret** (Helm-managed `kube-pulse-secret`) — update the value and
 re-deploy; the chart's `checksum/secret` annotation rolls the pods automatically so
 the new value takes effect:
 
 ```sh
-helm upgrade --install insiderone-devops-case helm/insiderone-devops-case \
-  -f helm/insiderone-devops-case/values-prod.yaml \
+helm upgrade --install kube-pulse helm/kube-pulse \
+  -f helm/kube-pulse/values-prod.yaml \
   --set-string secret.stringData.<KEY>=<NEW_VALUE>
-# (or update it from your secret manager, then) kubectl rollout restart deploy/insiderone-devops-case
+# (or update it from your secret manager, then) kubectl rollout restart deploy/kube-pulse
 ```
 
 **Cloudflare API token** (`cloudflare-api-token` in the `cert-manager` namespace,
@@ -110,13 +111,13 @@ OIDC tokens (no stored access keys) and to GHCR via the ephemeral `GITHUB_TOKEN`
 
 ## Observability
 
-Monitoring runs on **local minikube** (not EC2 — see ADR `day-4`). Bring it up and
+Monitoring runs on **local minikube** (not EC2 — see ADR 016). Bring it up and
 open the dashboards:
 
 ```sh
 make monitoring-install                  # kube-prometheus-stack in the `monitoring` ns
 make monitoring-prometheus               # localhost:9090 — Status/Targets, Alerts
-make monitoring-grafana                  # localhost:3000 — import docs/dashboards/insiderone-http.json
+make monitoring-grafana                  # localhost:3000 — import docs/dashboards/kube-pulse-http.json
 ```
 
 Grafana admin password:
@@ -130,14 +131,14 @@ Two alert rules ship as a `PrometheusRule`:
 
 **`HighErrorRate`** — 5xx ratio > 5% for 5m (warning):
 1. Confirm in Grafana which `route`/`status` is spiking (error-rate panel).
-2. Check recent rollouts — `helm history insiderone-devops-case`; if a bad image
+2. Check recent rollouts — `helm history kube-pulse`; if a bad image
    shipped, **roll back** (see Rollback). `helm --atomic` should already have
    reverted a failed deploy.
 3. Tail logs (above) for the failing `route` to find the cause.
 4. If load-driven, confirm the HPA is scaling: `kubectl get hpa`.
 
 **`AppDown`** — Prometheus can't scrape the app for 2m (critical):
-1. `kubectl get pods -l app.kubernetes.io/name=insiderone-devops-case` — are any Ready?
+1. `kubectl get pods -l app.kubernetes.io/name=kube-pulse` — are any Ready?
 2. Check the Prometheus target (Status → Targets) and the pod's events/logs.
 3. If a deploy broke it, roll back; otherwise `kubectl rollout restart` the deployment.
 
@@ -161,11 +162,11 @@ cluster needs this one-time setup before a prod deploy can serve HTTPS:
    on an existing box, add `minikube-https-forward.service` (mirror of the :80 one).
 6. **Deploy** (CI/CD does this automatically with `values-prod.yaml`):
    ```sh
-   helm upgrade --install insiderone-devops-case helm/insiderone-devops-case \
-     -f helm/insiderone-devops-case/values-prod.yaml
+   helm upgrade --install kube-pulse helm/kube-pulse \
+     -f helm/kube-pulse/values-prod.yaml
    ```
 7. **Wait for the cert** — `kubectl get certificate`; `kubectl describe certificate
-   insiderone-devops-case-tls` to debug a `False` Ready.
+   kube-pulse-tls` to debug a `False` Ready.
 8. **Cloudflare** — proxy ON (orange cloud), SSL/TLS mode **Full (strict)**.
 9. **Test** — `curl -I https://devops-case.aysu-keskin.uk/ping` → `200`.
 
@@ -180,7 +181,7 @@ If issuance is stuck: check `kubectl get challenges,orders -A`, the
 | HTTPS fails but HTTP works | `:443` forward down, or cert not Ready | `sudo systemctl status minikube-https-forward`; `kubectl get certificate` |
 | Cluster gone after reboot | minikube didn't restart | `sudo systemctl status minikube`; `sudo systemctl restart minikube` |
 | Deploy job: `not authorized to perform sts:AssumeRoleWithWebIdentity` | OIDC `sub` / owner-casing mismatch | confirm `AWS_ROLE_ARN` secret + trust policy repo path casing |
-| Deploy job: SSM `Failed` | helm/kubectl ran as root, not ec2-user | command must use `runuser -l ec2-user` (see ADR 006) |
+| Deploy job: SSM `Failed` | helm/kubectl ran as root, not ec2-user | command must use `runuser -l ec2-user` (see ADR 012) |
 | `ImagePullBackOff` | GHCR package not public | make the GHCR package public, or add an imagePullSecret |
 
 ## Teardown (stop all AWS billing)
