@@ -11,7 +11,11 @@ RELEASE    := kube-pulse
 
 MONITORING_NS := monitoring
 
-.PHONY: help run test docker-test build docker-build docker-run scan compose-up compose-down clean lint helm-lint helm-template deploy-dev deploy-prod rollback rollout-status rollout-dev rollout-prod helm-history helm-uninstall minikube-load monitoring-install monitoring-grafana monitoring-prometheus load-gen tls-install
+# Host-side port for `port-forward` and `load-gen`. Override when 8080 is taken:
+#   make port-forward LOCAL_PORT=8090
+LOCAL_PORT ?= 8080
+
+.PHONY: help run test docker-test build docker-build docker-run scan compose-up compose-down clean lint helm-lint helm-template deploy-dev deploy-prod rollback rollout-status rollout-dev rollout-prod helm-history helm-uninstall minikube-load monitoring-install monitoring-grafana monitoring-prometheus port-forward load-gen tls-install
 
 help: ## list targets
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_-]+:.*##/ {printf "  %-16s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -62,6 +66,9 @@ helm-template: ## render templates locally for inspection
 	helm template $(RELEASE) $(CHART) -f $(CHART)/values-dev.yaml
 
 minikube-load: ## load the locally-built image into minikube
+	# Remove first: minikube skips the load when the tag already exists, so a
+	# rebuilt image under an unchanged tag would silently never reach the node.
+	-minikube image rm $(IMAGE):$(TAG) 2>/dev/null || true
 	minikube image load $(IMAGE):$(TAG)
 
 deploy-dev: ## deploy to minikube with values-dev.yaml
@@ -105,8 +112,11 @@ monitoring-grafana: ## port-forward Grafana to localhost:3000 (user admin; see R
 monitoring-prometheus: ## port-forward Prometheus to localhost:9090
 	kubectl -n $(MONITORING_NS) port-forward svc/monitoring-kube-prometheus-prometheus 9090:9090
 
+port-forward: ## forward the in-cluster service to localhost:$(LOCAL_PORT)
+	kubectl port-forward svc/$(RELEASE) $(LOCAL_PORT):80
+
 load-gen: ## hammer /ping to populate RPS/latency panels (Ctrl-C to stop)
-	while true; do curl -s localhost:8080/ping >/dev/null; done
+	while true; do curl -s localhost:$(LOCAL_PORT)/ping >/dev/null; done
 
 tls-install: ## install cert-manager (for ingress TLS via Let's Encrypt DNS-01)
 	helm upgrade --install cert-manager oci://quay.io/jetstack/charts/cert-manager \

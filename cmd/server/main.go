@@ -48,9 +48,9 @@ func main() {
 	ready.Store(true)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /ping", handlers.Ping) // doğrudan fonksiyon kullanarak handler ekliyoruz
+	mux.HandleFunc("GET /ping", handlers.Ping)
 	mux.HandleFunc("GET /healthz", handlers.Healthz)
-	mux.Handle("GET /readyz", handlers.Readyz(&ready)) // handler interface ini implemente eden bir handler ekliyoruz
+	mux.Handle("GET /readyz", handlers.Readyz(&ready))
 	mux.HandleFunc("GET /version", handlers.Version)
 	mux.Handle("GET /metrics", promhttp.Handler())
 
@@ -115,8 +115,8 @@ func healthcheckEndpoint() string {
 }
 
 func runHealthcheck(endpoint string) int {
-	ctx, cancel := context.WithTimeout(context.Background(), healthcheckTimeout) // background boş başlangıç contexti
-	defer cancel() // fonksiyon bitince cancel çağırarak context iptal edilir. Fonksiyonun osnunda çalışır
+	ctx, cancel := context.WithTimeout(context.Background(), healthcheckTimeout)
+	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil) // create req
 	if err != nil {
@@ -127,7 +127,7 @@ func runHealthcheck(endpoint string) int {
 	if err != nil {
 		return 1
 	}
-	defer resp.Body.Close() // kapatılan kaynak
+	defer resp.Body.Close()
 	_, _ = io.Copy(io.Discard, resp.Body) // thia and body close is for tcp handsahke to not happend again on next req with same client
 
 	if resp.StatusCode != http.StatusOK {

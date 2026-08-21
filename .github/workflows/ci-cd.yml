@@ -31,9 +31,9 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: true
       - name: go vet
-        run: go vet ./... # şüpheli format kullanımı, yanlış API kullanımı gibi statik hataları bulur.
+        run: go vet ./...
       - name: go test (race + cover)
-        run: go test ./... -race -cover # -race ile data race tespit eder,-cover ile coverage raporu üretir.
+        run: go test ./... -race -cover
 
   secret-scan:
     name: secret scan

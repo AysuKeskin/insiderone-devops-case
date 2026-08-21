@@ -17,8 +17,8 @@ func Healthz(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// Readyz takes the ready flag by pointer so main() can flip it on SIGTERM (when pointed changes output changes)
-// to drain new traffic before the server shuts down.
+// Readyz takes the ready flag by pointer so main() can flip it on SIGTERM,
+// draining new traffic before the server shuts down.
 func Readyz(ready *atomic.Bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		if !ready.Load() {
@@ -37,6 +37,3 @@ func Version(w http.ResponseWriter, _ *http.Request) {
 		"built_at": version.BuiltAt,
 	})
 }
-
-
-// ping quick check, healtch is app working, readyz kapanma aşamasında fals eyapılır (trafik alamaz anlamına gelir)

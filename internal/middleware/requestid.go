@@ -19,8 +19,10 @@ func RequestID(next http.Handler) http.Handler {
 		if id == "" {
 			id = uuid.NewString()
 		}
-		w.Header().Set(HeaderRequestID, id) // client görsün diey header a derver içinde diğer şeyler görüsn diye de contexte yazılıyor
-		ctx := context.WithValue(r.Context(), requestIDKey, id) // key requestIDKey value id koy
+		// Echoed back so the caller can correlate a response with its logs, and
+		// carried in context so every log line downstream reports the same id.
+		w.Header().Set(HeaderRequestID, id)
+		ctx := context.WithValue(r.Context(), requestIDKey, id)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
