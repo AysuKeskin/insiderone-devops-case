@@ -3,13 +3,13 @@
 # Base images pinned by digest for reproducible builds. Bump intentionally
 # (e.g. for CVE patches) — never silently. To refresh:
 #   docker pull <tag> && docker inspect --format='{{index .RepoDigests 0}}' <tag>
-FROM golang:1.25-alpine@sha256:8d22e29d960bc50cd025d93d5b7c7d220b1ee9aa7a239b3c8f55a57e987e8d45 AS build 
+FROM golang:1.25-alpine@sha256:1ae0735f00daffa3aaf1363a5184c0d2dc55c78e3db4ec70241cdac97bf84b59 AS build
 WORKDIR /src
 
 COPY go.mod go.sum ./
 RUN go mod download # if only app code changes, this layer is cached
 
-COPY . . // copies all the files except dockerignore
+COPY . .
 
 ARG VERSION=dev
 ARG COMMIT=unknown
@@ -29,7 +29,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
 FROM gcr.io/distroless/static-debian12:nonroot@sha256:d093aa3e30dbadd3efe1310db061a14da60299baff8450a17fe0ccc514a16639
 WORKDIR /
 COPY --from=build /out/server /server
-USER nonroot:nonroot # no root permissions in the container, for security
+USER nonroot:nonroot
 EXPOSE 8080
 
 # OCI labels for GHCR linkage and supply-chain provenance.

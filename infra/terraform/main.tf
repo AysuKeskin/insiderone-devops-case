@@ -1,20 +1,3 @@
-# --- AMI ---------------------------------------------------------------------
-# Latest Amazon Linux 2023 (x86_64). SSM agent is preinstalled.
-data "aws_ami" "al2023" {
-  most_recent = true
-  owners      = ["amazon"]
-
-  filter {
-    name   = "name"
-    values = ["al2023-ami-2023*-x86_64"]
-  }
-
-  filter {
-    name   = "architecture"
-    values = ["x86_64"]
-  }
-}
-
 # --- EC2 instance profile: SSM only, no SSH ---------------------------------
 data "aws_iam_policy_document" "ec2_ssm_trust" {
   statement {
@@ -30,6 +13,13 @@ data "aws_iam_policy_document" "ec2_ssm_trust" {
 resource "aws_iam_role" "ec2_ssm" {
   name               = "ec2-ssm-${var.github_repo}"
   assume_role_policy = data.aws_iam_policy_document.ec2_ssm_trust.json
+
+  # Renaming replaces this resource while it is still attached to the running
+  # instance; without create_before_destroy Terraform deletes the old one first
+  # and AWS rejects it with DependencyViolation.
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "aws_iam_role_policy_attachment" "ec2_ssm_core" {
@@ -40,6 +30,13 @@ resource "aws_iam_role_policy_attachment" "ec2_ssm_core" {
 resource "aws_iam_instance_profile" "ec2_ssm" {
   name = "ec2-ssm-${var.github_repo}"
   role = aws_iam_role.ec2_ssm.name
+
+  # Renaming replaces this resource while it is still attached to the running
+  # instance; without create_before_destroy Terraform deletes the old one first
+  # and AWS rejects it with DependencyViolation.
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 # --- security group: only 80/443 in, all out, NO SSH ------------------------
@@ -70,11 +67,22 @@ resource "aws_security_group" "ec2" {
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
+
+  # Renaming replaces this resource while it is still attached to the running
+  # instance; without create_before_destroy Terraform deletes the old one first
+  # and AWS rejects it with DependencyViolation.
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 # --- EC2 instance -----------------------------------------------------------
 resource "aws_instance" "app" {
-  ami                    = data.aws_ami.al2023.id
+  # Amazon Linux 2023 (x86_64), SSM agent preinstalled. Pinned deliberately:
+  # this host carries a stateful single-node minikube cluster and a live
+  # Let's Encrypt cert, so a floating "most recent" lookup would replace the
+  # instance -- and wipe both -- on an otherwise unrelated apply.
+  ami                    = "ami-048a4ba4502b46dd7"
   instance_type          = var.instance_type
   iam_instance_profile   = aws_iam_instance_profile.ec2_ssm.name
   vpc_security_group_ids = [aws_security_group.ec2.id]
@@ -97,6 +105,14 @@ resource "aws_instance" "app" {
 
   tags = {
     Name = "${var.github_repo}-app"
+  }
+
+  # user_data only ever runs on first boot, but the provider stops and starts
+  # the instance to change the attribute. This host is already bootstrapped and
+  # its minikube cluster does not survive reboots cleanly, so drift here is
+  # ignored. A replacement still gets the current script.
+  lifecycle {
+    ignore_changes = [user_data]
   }
 }
 
