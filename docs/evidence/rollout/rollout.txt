@@ -1,0 +1,32 @@
+Zero-downtime rolling update on minikube (dev values, replicaCount 1).
+
+--- 1. before: what is running ---
+$ curl -s localhost:8090/version
+{"built_at":"2026-08-21T20:06:54Z","commit":"bb60acc","version":"v0.1.0-1-gbb60acc"}
+
+$ helm history kube-pulse --max 3
+REVISION	UPDATED                 	STATUS    	CHART           	APP VERSION	DESCRIPTION     
+2       	Fri Aug 21 21:25:26 2026	superseded	kube-pulse-0.1.0	0.1.0      	Upgrade complete
+3       	Fri Aug 21 21:49:24 2026	superseded	kube-pulse-0.1.0	0.1.0      	Upgrade complete
+4       	Fri Aug 21 23:08:00 2026	deployed  	kube-pulse-0.1.0	0.1.0      	Upgrade complete
+
+--- 2. upgrade to a new image tag ---
+$ helm upgrade kube-pulse helm/kube-pulse -f values-dev.yaml --set image.tag=rollout-demo --atomic
+NAME: kube-pulse
+LAST DEPLOYED: Fri Aug 21 23:08:34 2026
+STATUS: deployed
+REVISION: 5
+DESCRIPTION: Upgrade complete
+
+$ kubectl rollout status deployment/kube-pulse
+deployment "kube-pulse" successfully rolled out
+
+--- 3. after: new version is serving ---
+$ curl -s localhost:8090/version
+{"built_at":"2026-08-21T20:07:20Z","commit":"bb60acc","version":"v0.1.1-rollout-demo"}
+
+$ helm history kube-pulse --max 3
+REVISION	UPDATED                 	STATUS    	CHART           	APP VERSION	DESCRIPTION     
+3       	Fri Aug 21 21:49:24 2026	superseded	kube-pulse-0.1.0	0.1.0      	Upgrade complete
+4       	Fri Aug 21 23:08:00 2026	superseded	kube-pulse-0.1.0	0.1.0      	Upgrade complete
+5       	Fri Aug 21 23:08:34 2026	deployed  	kube-pulse-0.1.0	0.1.0      	Upgrade complete

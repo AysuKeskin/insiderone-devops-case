@@ -1,0 +1,24 @@
+Rolling back the previous upgrade with a single command (make rollback).
+
+--- 1. currently serving the new version ---
+$ curl -s localhost:8090/version
+{"built_at":"2026-08-21T20:07:20Z","commit":"bb60acc","version":"v0.1.1-rollout-demo"}
+
+
+--- 2. roll back to the previous revision ---
+$ helm rollback kube-pulse
+Rollback was a success! Happy Helming!
+$ kubectl rollout status deployment/kube-pulse
+Waiting for deployment "kube-pulse" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "kube-pulse" rollout to finish: 1 old replicas are pending termination...
+deployment "kube-pulse" successfully rolled out
+
+--- 3. after: the previous version is back ---
+$ curl -s localhost:8090/version
+{"built_at":"2026-08-21T20:06:54Z","commit":"bb60acc","version":"v0.1.0-1-gbb60acc"}
+
+$ helm history kube-pulse --max 3
+REVISION	UPDATED                 	STATUS    	CHART           	APP VERSION	DESCRIPTION     
+4       	Fri Aug 21 23:08:00 2026	superseded	kube-pulse-0.1.0	0.1.0      	Upgrade complete
+5       	Fri Aug 21 23:08:34 2026	superseded	kube-pulse-0.1.0	0.1.0      	Upgrade complete
+6       	Fri Aug 21 23:08:53 2026	deployed  	kube-pulse-0.1.0	0.1.0      	Rollback to 4   

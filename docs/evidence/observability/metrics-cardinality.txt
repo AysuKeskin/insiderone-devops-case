@@ -1,0 +1,11 @@
+$ curl -s localhost:8080/metrics | grep '^http_requests_total'
+http_requests_total{method="GET",route="GET /healthz",status="200"} 138
+http_requests_total{method="GET",route="GET /ping",status="200"} 39001
+http_requests_total{method="GET",route="GET /readyz",status="200"} 274
+http_requests_total{method="GET",route="GET /version",status="200"} 3
+http_requests_total{method="GET",route="unmatched",status="404"} 105
+
+Requests to 50 distinct unknown paths (/nope-1 .. /nope-50) all land on a
+single route="unmatched" series. The metrics middleware labels by the
+matched route pattern, never the raw path, so an attacker spraying random
+URLs cannot grow the time series count.

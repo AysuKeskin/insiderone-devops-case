@@ -197,6 +197,23 @@ The dashboard (`docs/dashboards/kube-pulse-http.json`) shows RPS, p50/p95 latenc
 
 HTTPS via cert-manager + Let's Encrypt with a DNS-01 (Cloudflare) challenge; the ingress terminates TLS behind Cloudflare Full (strict). DNS-01 is more reliable than HTTP-01 behind a Cloudflare proxy, since it only needs a TXT record rather than reaching the origin on port 80. Setup steps in [RUNBOOK.md](RUNBOOK.md) → "TLS / HTTPS".
 
+## Evidence
+
+Captured runs, not claims. Each file shows the named behaviour actually happening.
+
+| Artifact | Shows |
+|---|---|
+| [`public-url/public-url-ping.png`](docs/evidence/public-url/public-url-ping.png) | `curl -i` against the live HTTPS URL — 200, `pong`, Cloudflare in front |
+| [`cicd/pipeline-green.png`](docs/evidence/cicd/pipeline-green.png) | the full pipeline green: test, gitleaks, helm lint, Trivy-gated build, cosign + SBOM, SSM deploy |
+| [`observability/prometheus-targets.png`](docs/evidence/observability/prometheus-targets.png) | Prometheus scraping the app through the chart's `ServiceMonitor`, target UP |
+| [`observability/alert-rules.png`](docs/evidence/observability/alert-rules.png) | `HighErrorRate` and `AppDown` loaded from the chart's `PrometheusRule` |
+| [`observability/grafana-dashboard.png`](docs/evidence/observability/grafana-dashboard.png) | RPS, p50/p95 latency, 5xx ratio, pod restarts under load |
+| [`observability/metrics-cardinality.txt`](docs/evidence/observability/metrics-cardinality.txt) | 50 distinct unknown paths collapsing into one `route="unmatched"` series |
+| [`rollout/rollout-strategy.txt`](docs/evidence/rollout/rollout-strategy.txt) | the Deployment's `RollingUpdate` settings (`maxSurge: 1, maxUnavailable: 0`) |
+| [`rollout/rollout.txt`](docs/evidence/rollout/rollout.txt) | an upgrade to a new image tag, revision bump, `/version` following it |
+| [`rollout/rollback.txt`](docs/evidence/rollout/rollback.txt) | `helm rollback` reverting that upgrade in one command |
+| [`chaos/chaos.txt`](docs/evidence/chaos/chaos.txt) | the pod deleted and rebuilt by its ReplicaSet, Ready again in 3s |
+
 ## Layout
 
 | Path | Contents |
@@ -211,5 +228,6 @@ HTTPS via cert-manager + Let's Encrypt with a DNS-01 (Cloudflare) challenge; the
 | `.github/workflows/` | `ci-cd.yml`: build → scan → sign → push → SSM deploy |
 | `docs/adr/` | architecture decision records |
 | `docs/dashboards/` | Grafana dashboard JSON |
+| `docs/evidence/` | captured screenshots and command output backing the claims above |
 | `docs/architecture.*` | architecture diagram (draw.io — PNG embed + SVG vector/source) |
 

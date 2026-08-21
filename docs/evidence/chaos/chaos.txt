@@ -1,0 +1,38 @@
+Chaos check: delete the running pod and watch Kubernetes rebuild it.
+Dev values run a single replica, so this is a visible restart; values-prod
+runs three behind a RollingUpdate, where the same event is invisible.
+
+--- 1. before ---
+$ kubectl get pods -l app.kubernetes.io/name=kube-pulse
+NAME                          READY   STATUS    RESTARTS   AGE
+kube-pulse-665645549c-ql2bz   1/1     Running   0          28s
+
+--- 2. kill it ---
+$ kubectl delete pod kube-pulse-665645549c-ql2bz
+pod "kube-pulse-665645549c-ql2bz" deleted from default namespace
+
+--- 3. the ReplicaSet immediately schedules a replacement ---
+$ kubectl get pods -l app.kubernetes.io/name=kube-pulse
+NAME                          READY   STATUS    RESTARTS   AGE
+kube-pulse-665645549c-fc2wm   0/1     Running   0          1s
+
+--- 4. back to Ready in 3s, serving again ---
+$ kubectl get pods -l app.kubernetes.io/name=kube-pulse
+NAME                          READY   STATUS    RESTARTS   AGE
+kube-pulse-665645549c-fc2wm   1/1     Running   0          5s
+$ curl -s localhost:8090/ping
+pong
+$ curl -s localhost:8090/version
+{"built_at":"2026-08-21T20:06:54Z","commit":"bb60acc","version":"v0.1.0-1-gbb60acc"}
+
+
+--- 5. what the cluster recorded ---
+$ kubectl get events --field-selector involvedObject.kind=Pod --sort-by=.lastTimestamp | tail -8
+33s         Normal   Created     pod/kube-pulse-665645549c-ql2bz   Container created
+33s         Normal   Started     pod/kube-pulse-665645549c-ql2bz   Container started
+33s         Normal   Pulled      pod/kube-pulse-665645549c-ql2bz   Container image "ghcr.io/aysukeskin/kube-pulse:bb60acc" already present on machine and can be accessed by the pod
+31s         Normal   Killing     pod/kube-pulse-5747ddbf75-485ms   Stopping container app
+5s          Normal   Killing     pod/kube-pulse-665645549c-ql2bz   Stopping container app
+5s          Normal   Created     pod/kube-pulse-665645549c-fc2wm   Container created
+5s          Normal   Pulled      pod/kube-pulse-665645549c-fc2wm   Container image "ghcr.io/aysukeskin/kube-pulse:bb60acc" already present on machine and can be accessed by the pod
+5s          Normal   Started     pod/kube-pulse-665645549c-fc2wm   Container started
