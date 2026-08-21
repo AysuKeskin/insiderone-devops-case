@@ -22,6 +22,21 @@ variable "github_repo" {
   default     = "kube-pulse"
 }
 
+# GitHub now embeds immutable numeric IDs in the OIDC subject claim
+# (owner@ownerID/repo@repoID), so the trust policy has to know them. Read them
+# from https://api.github.com/users/<owner> and .../repos/<owner>/<repo>.
+variable "github_owner_id" {
+  description = "Numeric GitHub owner ID used in the OIDC subject claim."
+  type        = string
+  default     = "182776874"
+}
+
+variable "github_repo_id" {
+  description = "Numeric GitHub repository ID used in the OIDC subject claim."
+  type        = string
+  default     = "1247650773"
+}
+
 variable "root_volume_size_gb" {
   description = "Root EBS volume size in GB. Minikube + image cache need ~10 GB headroom."
   type        = number

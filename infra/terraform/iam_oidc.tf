@@ -27,13 +27,18 @@ data "aws_iam_policy_document" "gha_deploy_trust" {
     }
 
     # Restrict to this repo's main branch and v* tags only. No PR workflows
-    # can assume this role.
+    # can assume this role. Both subject shapes are listed: GitHub now issues
+    # the ID-bearing form (owner@id/repo@id), which survives a repo rename,
+    # but the plain form is kept so a rollback on their side doesn't break
+    # deploys.
     condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
       values = [
         "repo:${var.github_owner}/${var.github_repo}:ref:refs/heads/main",
         "repo:${var.github_owner}/${var.github_repo}:ref:refs/tags/v*",
+        "repo:${var.github_owner}@${var.github_owner_id}/${var.github_repo}@${var.github_repo_id}:ref:refs/heads/main",
+        "repo:${var.github_owner}@${var.github_owner_id}/${var.github_repo}@${var.github_repo_id}:ref:refs/tags/v*",
       ]
     }
   }
