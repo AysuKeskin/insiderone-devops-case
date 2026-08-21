@@ -212,3 +212,4 @@ HTTPS via cert-manager + Let's Encrypt with a DNS-01 (Cloudflare) challenge; the
 | `docs/adr/` | architecture decision records |
 | `docs/dashboards/` | Grafana dashboard JSON |
 | `docs/architecture.*` | architecture diagram (draw.io — PNG embed + SVG vector/source) |
+
